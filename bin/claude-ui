@@ -1,0 +1,128 @@
+#!/usr/bin/env node
+
+import readline from 'readline';
+import chalk from 'chalk';
+import { spawn } from 'child_process';
+import { loadConfig, saveConfig } from '../lib/config.js';
+import { detectTaskType } from '../lib/router.js';
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  prompt: chalk.cyan('claude> ')
+});
+
+let config = loadConfig();
+
+// Command handlers
+const commands = {
+  help: () => {
+    console.log(chalk.yellow('\nAvailable commands:'));
+    console.log('  mode <yolo|yolt|airbag|router>  - Switch mode');
+    console.log('  config                          - Show current config');
+    console.log('  set <key> <value>              - Update config');
+    console.log('  clear                          - Clear screen');
+    console.log('  exit/quit                      - Exit');
+    console.log(chalk.gray('\nOr just type your prompt to send to Claude\n'));
+  },
+  
+  mode: (args) => {
+    const mode = args[0];
+    if (!['yolo', 'yolt', 'airbag', 'router'].includes(mode)) {
+      console.log(chalk.red('Invalid mode. Choose: yolo, yolt, airbag, router'));
+      return;
+    }
+    config.defaultMode = mode;
+    saveConfig(config);
+    console.log(chalk.green(`✓ Switched to ${mode} mode`));
+  },
+  
+  config: () => {
+    console.log(chalk.yellow('\nCurrent configuration:'));
+    console.log(JSON.stringify(config, null, 2));
+  },
+  
+  set: (args) => {
+    const [key, ...valueParts] = args;
+    const value = valueParts.join(' ');
+    
+    // Parse nested keys
+    const keys = key.split('.');
+    let obj = config;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!obj[keys[i]]) obj[keys[i]] = {};
+      obj = obj[keys[i]];
+    }
+    
+    // Try to parse value as number/boolean
+    let parsedValue = value;
+    if (value === 'true') parsedValue = true;
+    else if (value === 'false') parsedValue = false;
+    else if (!isNaN(value)) parsedValue = Number(value);
+    
+    obj[keys[keys.length - 1]] = parsedValue;
+    saveConfig(config);
+    console.log(chalk.green(`✓ Set ${key} = ${parsedValue}`));
+  },
+  
+  clear: () => {
+    console.clear();
+  },
+  
+  exit: () => {
+    console.log(chalk.cyan('Goodbye!'));
+    process.exit(0);
+  },
+  
+  quit: () => commands.exit()
+};
+
+// Show welcome message
+console.log(chalk.cyan.bold('\n🎯 Claude-YOLT Interactive Mode\n'));
+console.log(chalk.gray(`Current mode: ${config.defaultMode}`));
+console.log(chalk.gray('Type "help" for commands or just enter your prompt\n'));
+
+// Handle input
+rl.on('line', async (line) => {
+  const input = line.trim();
+  
+  if (!input) {
+    rl.prompt();
+    return;
+  }
+  
+  // Check if it's a command
+  const [cmd, ...args] = input.split(' ');
+  if (commands[cmd]) {
+    commands[cmd](args);
+    rl.prompt();
+    return;
+  }
+  
+  // Otherwise, send to Claude
+  console.log(chalk.gray(`\nUsing ${config.defaultMode} mode...`));
+  
+  // Detect task type for router mode
+  if (config.defaultMode === 'router') {
+    const taskType = detectTaskType(input);
+    console.log(chalk.blue(`Task type: ${taskType}`));
+  }
+  
+  // Spawn the appropriate command
+  const child = spawn(`claude-${config.defaultMode}`, [input], {
+    stdio: 'inherit',
+    shell: true
+  });
+  
+  child.on('exit', () => {
+    rl.prompt();
+  });
+});
+
+rl.on('close', () => {
+  console.log(chalk.cyan('\nGoodbye!'));
+  process.exit(0);
+});
+
+// Start the prompt
+rl.prompt();

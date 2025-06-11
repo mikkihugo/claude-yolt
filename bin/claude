@@ -1,0 +1,154 @@
+#!/usr/bin/env node
+
+import { program } from 'commander';
+import chalk from 'chalk';
+import { spawn } from 'child_process';
+import { loadConfig, saveConfig } from '../lib/config.js';
+import { detectTaskType } from '../lib/router.js';
+import fs from 'fs';
+
+const config = loadConfig();
+const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url)));
+
+program
+  .name('claude')
+  .description('Unified Claude CLI with YOLO, safety, and routing modes')
+  .version(packageJson.version)
+  .option('-m, --mode <mode>', 'Mode: yolo, yolt, airbag, router', config.defaultMode)
+  .option('-s, --safe', 'Use airbag mode (maximum safety)')
+  .option('-r, --router', 'Use smart routing mode')
+  .option('-y, --yolo', 'Use pure YOLO mode (no limits)')
+  .option('--memory <mb>', 'Memory limit in MB', parseInt)
+  .option('--cpu <seconds>', 'CPU time limit in seconds', parseInt)
+  .option('--set-default <mode>', 'Set default mode')
+  .option('--config', 'Show current configuration')
+  .argument('[prompt...]', 'Your prompt for Claude')
+  .action((prompt, options) => {
+    // Handle config command
+    if (options.config) {
+      console.log(chalk.yellow('Current configuration:'));
+      console.log(JSON.stringify(config, null, 2));
+      return;
+    }
+    
+    // Handle set default
+    if (options.setDefault) {
+      config.defaultMode = options.setDefault;
+      saveConfig(config);
+      console.log(chalk.green(`✓ Default mode set to: ${options.setDefault}`));
+      return;
+    }
+    
+    // Determine mode
+    let mode = options.mode || config.defaultMode;
+    if (options.safe) mode = 'airbag';
+    else if (options.router) mode = 'router';
+    else if (options.yolo) mode = 'yolo';
+    
+    // Handle no prompt
+    if (!prompt || prompt.length === 0) {
+      program.help();
+      return;
+    }
+    
+    const promptStr = prompt.join(' ');
+    
+    // Show mode info
+    const modeInfo = {
+      yolo: chalk.red('🔥 YOLO mode - no limits'),
+      yolt: chalk.cyan('🎯 YOLT mode - YOLO + safety'),
+      airbag: chalk.yellow('🪂 Airbag mode - maximum safety'),
+      router: chalk.blue('🧠 Router mode - smart routing')
+    };
+    
+    console.log(modeInfo[mode] || chalk.gray(`Using ${mode} mode`));
+    
+    // Apply runtime overrides
+    const env = { ...process.env };
+    if (options.memory) {
+      env.CLAUDE_MEMORY_LIMIT = options.memory;
+      console.log(chalk.gray(`Memory limit: ${options.memory}MB`));
+    }
+    if (options.cpu) {
+      env.CLAUDE_CPU_LIMIT = options.cpu;
+      console.log(chalk.gray(`CPU limit: ${options.cpu}s`));
+    }
+    
+    // For router mode, show task detection
+    if (mode === 'router') {
+      const taskType = detectTaskType(promptStr);
+      console.log(chalk.blue(`Task type: ${taskType}`));
+    }
+    
+    // Spawn the appropriate command
+    const child = spawn(`claude-${mode}`, [promptStr], {
+      stdio: 'inherit',
+      shell: true,
+      env
+    });
+    
+    child.on('exit', (code) => {
+      process.exit(code || 0);
+    });
+  });
+
+// Add interactive mode
+program
+  .command('ui')
+  .description('Start interactive UI mode')
+  .action(() => {
+    spawn('node', [new URL('./claude-ui', import.meta.url).pathname], {
+      stdio: 'inherit'
+    });
+  });
+
+// Add config commands
+program
+  .command('config <action> [key] [value]')
+  .description('Manage configuration (get/set/show)')
+  .action((action, key, value) => {
+    switch (action) {
+      case 'show':
+        console.log(JSON.stringify(config, null, 2));
+        break;
+      case 'get':
+        if (!key) {
+          console.log(JSON.stringify(config, null, 2));
+        } else {
+          const keys = key.split('.');
+          let val = config;
+          for (const k of keys) {
+            val = val[k];
+            if (val === undefined) break;
+          }
+          console.log(val);
+        }
+        break;
+      case 'set':
+        if (!key || value === undefined) {
+          console.error('Usage: claude config set <key> <value>');
+          process.exit(1);
+        }
+        const keys = key.split('.');
+        let obj = config;
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!obj[keys[i]]) obj[keys[i]] = {};
+          obj = obj[keys[i]];
+        }
+        // Parse value
+        let parsedValue = value;
+        if (value === 'true') parsedValue = true;
+        else if (value === 'false') parsedValue = false;
+        else if (!isNaN(value)) parsedValue = Number(value);
+        
+        obj[keys[keys.length - 1]] = parsedValue;
+        saveConfig(config);
+        console.log(chalk.green(`✓ Set ${key} = ${parsedValue}`));
+        break;
+      default:
+        console.error('Unknown action. Use: show, get, set');
+        process.exit(1);
+    }
+  });
+
+program.parse();

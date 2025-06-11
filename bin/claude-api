@@ -1,0 +1,38 @@
+#!/usr/bin/env node
+
+import { program } from 'commander';
+import chalk from 'chalk';
+import { startApiServer } from '../lib/api-server.js';
+import { loadConfig, saveConfig } from '../lib/config.js';
+
+program
+  .name('claude-api')
+  .description('OpenAI-compatible API server for Claude CLI')
+  .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('-k, --key <key>', 'API key for authentication')
+  .option('--set-key <key>', 'Save API key to config')
+  .action((options) => {
+    const config = loadConfig();
+    
+    // Handle saving API key
+    if (options.setKey) {
+      config.apiKey = options.setKey;
+      saveConfig(config);
+      console.log(chalk.green('✓ API key saved to config'));
+      return;
+    }
+    
+    const port = parseInt(options.port);
+    const apiKey = options.key || config.apiKey || process.env.CLAUDE_API_KEY;
+    
+    if (apiKey) {
+      process.env.CLAUDE_API_KEY = apiKey;
+      console.log(chalk.gray('API key authentication enabled'));
+    } else {
+      console.log(chalk.yellow('⚠️  No API key set - server will accept all requests'));
+    }
+    
+    startApiServer(port);
+  });
+
+program.parse();

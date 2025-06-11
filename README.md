@@ -42,6 +42,78 @@ npm install -g claude-yolt
 
 ## Usage
 
+### Unified Command Interface
+
+```bash
+# Use default mode (configured in ~/.claude-yolt/config.json)
+claude "fix this code"
+
+# Specify mode with flags
+claude --yolo "give me unlimited power"
+claude --safe "analyze untrusted code"
+claude --router "format this file"
+claude -m yolt "build my project"
+
+# Runtime limits
+claude --memory 2048 --cpu 300 "run tests"
+
+# Configure default mode
+claude --set-default router
+claude config set defaultMode yolt
+claude config set safety.maxMemMB 8192
+
+# Interactive UI mode
+claude ui
+
+# Start OpenAI-compatible API server
+claude-api --port 3000
+claude-api --key my-secret-key  # With authentication
+```
+
+### OpenAI-Compatible API
+
+Start an API server that wraps Claude CLI with an OpenAI-compatible interface:
+
+```bash
+# Start server
+claude-api
+
+# With authentication
+claude-api --key sk-my-secret-key
+claude-api --set-key sk-my-secret-key  # Save to config
+
+# Use with curl
+curl http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-my-secret-key" \
+  -d '{
+    "model": "claude-3-opus-20240229",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true
+  }'
+
+# Use with OpenAI Python SDK
+from openai import OpenAI
+client = OpenAI(
+    api_key="sk-my-secret-key",
+    base_url="http://localhost:3000/v1"
+)
+
+response = client.chat.completions.create(
+    model="claude-router",  # Use router mode
+    messages=[{"role": "user", "content": "Format this code"}]
+)
+```
+
+Available models via API:
+- `claude-3-opus-20240229` - Uses default mode
+- `claude-yolo` - Pure YOLO mode
+- `claude-safe` - Airbag mode
+- `claude-router` - Smart routing mode
+```
+
+### Direct Commands (for backwards compatibility)
+
 ```bash
 # Pure YOLO mode (no limits)
 claude-yolo "fix this code"
