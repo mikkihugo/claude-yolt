@@ -45,29 +45,29 @@ npm install -g claude-yolt
 ### Unified Command Interface
 
 ```bash
-# Use default mode (configured in ~/.claude-yolt/config.json)
-claude "fix this code"
+# Default YOLT mode (YOLO + safety)
+claude-yolt "fix this code"
 
-# Specify mode with flags
-claude --yolo "give me unlimited power"
-claude --safe "analyze untrusted code"
-claude --router "format this file"
-claude -m yolt "build my project"
+# Use unified command with flags
+cyolt --yolo "give me unlimited power"
+cyolt --safe "analyze untrusted code"
+cyolt --router "format this file"
+cyolt -m airbag "check suspicious code"
 
 # Runtime limits
-claude --memory 2048 --cpu 300 "run tests"
+cyolt --memory 2048 --cpu 300 "run tests"
 
-# Configure default mode
-claude --set-default router
-claude config set defaultMode yolt
-claude config set safety.maxMemMB 8192
+# Configure defaults
+cyolt --set-default router
+cyolt config set defaultMode yolt
+cyolt config set safety.maxMemMB 8192
 
 # Interactive UI mode
-claude ui
+claude-yolt-ui
 
 # Start OpenAI-compatible API server
-claude-api --port 3000
-claude-api --key my-secret-key  # With authentication
+claude-yolt-api --port 3000
+claude-yolt-api --key my-secret-key  # With authentication
 ```
 
 ### OpenAI-Compatible API
