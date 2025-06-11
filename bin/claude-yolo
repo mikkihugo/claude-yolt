@@ -68,8 +68,11 @@ async function main() {
       modifyClaudeForYolo(originalCliPath, yoloCliPath, isLocal);
     }
     
-    // Activate YOLO mode
-    await activateYoloMode();
+    // Show YOLO message
+    console.log(`${YELLOW}🔥 YOLO MODE ACTIVATED 🔥${RESET}`);
+    
+    // Pass all args to modified CLI
+    process.argv.splice(2, 0, '--dangerously-skip-permissions');
     
     // Import and run the modified CLI
     await import(yoloCliPath);

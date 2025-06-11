@@ -1,18 +1,15 @@
 #!/usr/bin/env node
 
-import { findClaudeInstallation, modifyClaudeForYolo, checkForClaudeUpdates, activateYoloMode } from '../lib/yolo.js';
+import { findClaudeInstallation, modifyClaudeForYolo, checkForClaudeUpdates } from '../lib/yolo.js';
 import { SAFETY_MODES, applyResourceLimits, monitorProcess } from '../lib/safety.js';
 import { spawn } from 'child_process';
 import chalk from 'chalk';
 import fs from 'fs';
-import path from 'path';
 
 // Main
 async function main() {
   try {
-    console.log(chalk.cyan('🎯 YOLT MODE: You Only Live Twice (YOLO + Safety)'));
-    
-    // Check for updates
+    // Check for updates silently
     await checkForClaudeUpdates();
     
     // Find Claude installation
@@ -25,7 +22,6 @@ async function main() {
     
     // Get safety limits
     const limits = SAFETY_MODES.yolt;
-    console.log(chalk.gray(`Safety: ${limits.maxMemMB}MB RAM, ${limits.maxProcs} procs, ${limits.cpuLimit}s CPU`));
     
     // Apply environment limits
     const env = {
@@ -33,8 +29,12 @@ async function main() {
       ...applyResourceLimits(limits)
     };
     
-    // Add YOLO flag
-    const args = ['--dangerously-skip-permissions', ...process.argv.slice(2)];
+    // Pass ALL arguments to Claude CLI, including flags
+    // The YOLO modification already adds --dangerously-skip-permissions internally
+    const args = process.argv.slice(2);
+    
+    // If no args provided, Claude CLI will show its own UI/prompt
+    // Otherwise it processes the command/prompt
     
     // Spawn Claude with safety limits
     const child = spawn('node', [yoloCliPath, ...args], {

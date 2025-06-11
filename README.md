@@ -42,32 +42,27 @@ npm install -g claude-yolt
 
 ## Usage
 
-### Unified Command Interface
+### Primary Command: claude-yolt
+
+`claude-yolt` is a drop-in replacement for `claude` that mirrors all Claude CLI behavior:
 
 ```bash
-# Default YOLT mode (YOLO + safety)
+# If prompt provided, executes it
 claude-yolt "fix this code"
 
-# Use unified command with flags
-cyolt --yolo "give me unlimited power"
-cyolt --safe "analyze untrusted code"
-cyolt --router "format this file"
-cyolt -m airbag "check suspicious code"
+# If no arguments, opens Claude's interactive UI
+claude-yolt
 
-# Runtime limits
-cyolt --memory 2048 --cpu 300 "run tests"
+# Supports all Claude CLI flags
+claude-yolt --help
+claude-yolt --version
+claude-yolt --model claude-3-opus-20240229
+claude-yolt --output result.txt "analyze this"
 
-# Configure defaults
-cyolt --set-default router
-cyolt config set defaultMode yolt
-cyolt config set safety.maxMemMB 8192
-
-# Interactive UI mode
-claude-yolt-ui
-
-# Start OpenAI-compatible API server
-claude-yolt-api --port 3000
-claude-yolt-api --key my-secret-key  # With authentication
+# Everything works just like claude, but with:
+# - Automatic permission bypass (no security prompts)
+# - Safety limits (4GB RAM, CPU limits)
+# - Auto-updates Claude CLI
 ```
 
 ### OpenAI-Compatible API
@@ -112,24 +107,28 @@ Available models via API:
 - `claude-router` - Smart routing mode
 ```
 
-### Direct Commands (for backwards compatibility)
+### Additional Commands
 
 ```bash
-# Pure YOLO mode (no limits)
+# Pure YOLO mode (no safety limits)
 claude-yolo "fix this code"
 
-# YOLO with safety (recommended)
-claude-yolt "build my project"
-claude-007 "run tests"
-
-# Maximum safety
+# Maximum safety mode
 claude-airbag "analyze untrusted code"
 
-# Wrap commands
+# Smart routing to save money
+claude-router "format this file"
+
+# Wrap any command with safety limits
 claude-seatbelt npm test
 
-# Smart routing (saves money)
-claude-router "format this file"
+# Interactive UI (similar to claude with no args)
+claude-yolt-ui
+
+# Unified command with mode selection
+cyolt --yolo "no limits"
+cyolt --safe "maximum safety"
+cyolt --router "smart routing"
 ```
 
 ## Safety Comparison
