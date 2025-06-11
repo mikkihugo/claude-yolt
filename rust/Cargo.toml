@@ -1,0 +1,42 @@
+[package]
+name = "claude-yolt"
+version = "1.0.0"
+edition = "2021"
+authors = ["mikkihugo"]
+description = "Unified Claude CLI wrapper: YOLO mode + safety limits + intelligent routing"
+license = "MIT"
+repository = "https://github.com/mikkihugo/claude-yolt"
+
+[[bin]]
+name = "claude-yolt"
+path = "src/bin/claude-yolt.rs"
+
+[[bin]]
+name = "claude-airbag"
+path = "src/bin/claude-airbag.rs"
+
+[[bin]]
+name = "claude-router"
+path = "src/bin/claude-router.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+sysinfo = "0.30"
+nix = { version = "0.27", features = ["process", "signal"] }
+chrono = "0.4"
+colored = "2.1"
+which = "6.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "5.0"
+reqwest = { version = "0.11", features = ["json"] }
+toml = "0.8"
+shellexpand = "3.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1

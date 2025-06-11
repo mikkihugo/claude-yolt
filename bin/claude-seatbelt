@@ -1,0 +1,25 @@
+#!/usr/bin/env node
+
+import { runWithSafety } from '../lib/safety.js';
+import chalk from 'chalk';
+
+// Main
+async function main() {
+  const args = process.argv.slice(2);
+  
+  if (args.length === 0) {
+    console.error(chalk.red('Usage: claude-seatbelt <command> [args...]'));
+    console.error(chalk.gray('Example: claude-seatbelt npm test'));
+    process.exit(1);
+  }
+  
+  console.log(chalk.green('🔧 SEATBELT MODE: Wrapping command with safety limits'));
+  
+  // Get the command
+  const command = args.join(' ');
+  
+  // Run with safety
+  runWithSafety(command, 'seatbelt');
+}
+
+main();

@@ -1,0 +1,41 @@
+{
+  "name": "claude-yolt",
+  "version": "1.0.0",
+  "description": "Unified Claude CLI wrapper: YOLO mode + safety limits + intelligent routing",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "claude-yolo": "./bin/claude-yolo",
+    "claude-yolt": "./bin/claude-yolt",
+    "claude-007": "./bin/claude-yolt",
+    "claude-airbag": "./bin/claude-airbag",
+    "claude-seatbelt": "./bin/claude-seatbelt",
+    "claude-router": "./bin/claude-router"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.js && cargo build --release --manifest-path rust/Cargo.toml || true",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "claude",
+    "cli",
+    "yolo",
+    "safety",
+    "router",
+    "ai"
+  ],
+  "author": "mikkihugo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mikkihugo/claude-yolt.git"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "cli-spinners": "^2.9.0",
+    "ora": "^6.3.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

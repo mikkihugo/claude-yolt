@@ -1,0 +1,84 @@
+#!/usr/bin/env node
+
+import { routeRequest, MODELS } from '../lib/router.js';
+import { spawn, execSync } from 'child_process';
+import chalk from 'chalk';
+import fs from 'fs';
+import path from 'path';
+
+// Check if Rust binary exists
+function hasRustBinary() {
+  try {
+    execSync('which claude-router', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Main
+async function main() {
+  // Use Rust binary if available and not forced to JS
+  if (hasRustBinary() && !process.env.FORCE_JS_ROUTER) {
+    console.log(chalk.gray('Using Rust router for better performance'));
+    const child = spawn('claude-router', process.argv.slice(2), {
+      stdio: 'inherit'
+    });
+    child.on('exit', code => process.exit(code || 0));
+    return;
+  }
+  
+  console.log(chalk.blue('🧠 ROUTER MODE: Intelligent task routing'));
+  
+  const args = process.argv.slice(2);
+  const prompt = args.join(' ');
+  
+  if (!prompt) {
+    console.error(chalk.red('Usage: claude-router <prompt>'));
+    process.exit(1);
+  }
+  
+  // Extract files from prompt if any
+  const files = [];
+  const words = prompt.split(' ');
+  for (const word of words) {
+    if (fs.existsSync(word)) {
+      files.push(word);
+    }
+  }
+  
+  // Route the request
+  const result = routeRequest(prompt, { files });
+  
+  // Handle local tool
+  if (result.provider === 'local') {
+    console.log(chalk.green(`Running: ${result.command}`));
+    try {
+      execSync(result.command, { stdio: 'inherit' });
+    } catch (err) {
+      console.error(chalk.red(`Local tool failed: ${err.message}`));
+      process.exit(1);
+    }
+    return;
+  }
+  
+  // Handle AI models
+  if (result.name === 'claude') {
+    // Use claude-yolt for Claude (YOLO + safety)
+    console.log(chalk.cyan('Routing to claude-yolt...'));
+    const child = spawn('claude-yolt', args, {
+      stdio: 'inherit'
+    });
+    child.on('exit', code => process.exit(code || 0));
+  } else {
+    // TODO: Implement other model providers
+    console.log(chalk.yellow(`Model ${result.name} not yet implemented`));
+    console.log(chalk.gray('Falling back to Claude...'));
+    const child = spawn('claude-yolt', args, {
+      stdio: 'inherit'
+    });
+    child.on('exit', code => process.exit(code || 0));
+  }
+}
+
+main();

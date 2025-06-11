@@ -1,0 +1,65 @@
+#!/usr/bin/env node
+
+import { findClaudeInstallation, modifyClaudeForYolo, checkForClaudeUpdates, activateYoloMode } from '../lib/yolo.js';
+import { SAFETY_MODES, applyResourceLimits, monitorProcess } from '../lib/safety.js';
+import { spawn } from 'child_process';
+import chalk from 'chalk';
+import fs from 'fs';
+import path from 'path';
+
+// Main
+async function main() {
+  try {
+    console.log(chalk.cyan('🎯 YOLT MODE: You Only Live Twice (YOLO + Safety)'));
+    
+    // Check for updates
+    await checkForClaudeUpdates();
+    
+    // Find Claude installation
+    const { claudeDir, originalCliPath, yoloCliPath, isLocal } = findClaudeInstallation();
+    
+    // Create modified CLI if needed
+    if (!fs.existsSync(yoloCliPath)) {
+      modifyClaudeForYolo(originalCliPath, yoloCliPath, isLocal);
+    }
+    
+    // Get safety limits
+    const limits = SAFETY_MODES.yolt;
+    console.log(chalk.gray(`Safety: ${limits.maxMemMB}MB RAM, ${limits.maxProcs} procs, ${limits.cpuLimit}s CPU`));
+    
+    // Apply environment limits
+    const env = {
+      ...process.env,
+      ...applyResourceLimits(limits)
+    };
+    
+    // Add YOLO flag
+    const args = ['--dangerously-skip-permissions', ...process.argv.slice(2)];
+    
+    // Spawn Claude with safety limits
+    const child = spawn('node', [yoloCliPath, ...args], {
+      env,
+      stdio: 'inherit'
+    });
+    
+    // Monitor the process
+    const monitor = monitorProcess(child.pid, limits);
+    
+    child.on('exit', (code) => {
+      monitor.stop();
+      process.exit(code || 0);
+    });
+    
+    child.on('error', (err) => {
+      monitor.stop();
+      console.error(chalk.red(`Error: ${err.message}`));
+      process.exit(1);
+    });
+    
+  } catch (error) {
+    console.error(chalk.red(`Error: ${error.message}`));
+    process.exit(1);
+  }
+}
+
+main();
