@@ -5,6 +5,10 @@ Unified Claude CLI wrapper combining the best of three projects:
 - **Safety features** from claude-safer (resource limits)
 - **Intelligent routing** from claude-safer-rs (cost optimization)
 
+## ⚠️ Safety Warning
+
+On first run, claude-yolt displays a safety warning about bypassing Claude's security features. You have 10 seconds to respond, or it proceeds automatically. This warning appears only once.
+
 ## Installation
 
 ```bash
@@ -65,47 +69,6 @@ claude-yolt --output result.txt "analyze this"
 # - Auto-updates Claude CLI
 ```
 
-### OpenAI-Compatible API
-
-Start an API server that wraps Claude CLI with an OpenAI-compatible interface:
-
-```bash
-# Start server
-claude-api
-
-# With authentication
-claude-api --key sk-my-secret-key
-claude-api --set-key sk-my-secret-key  # Save to config
-
-# Use with curl
-curl http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-my-secret-key" \
-  -d '{
-    "model": "claude-3-opus-20240229",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "stream": true
-  }'
-
-# Use with OpenAI Python SDK
-from openai import OpenAI
-client = OpenAI(
-    api_key="sk-my-secret-key",
-    base_url="http://localhost:3000/v1"
-)
-
-response = client.chat.completions.create(
-    model="claude-router",  # Use router mode
-    messages=[{"role": "user", "content": "Format this code"}]
-)
-```
-
-Available models via API:
-- `claude-3-opus-20240229` - Uses default mode
-- `claude-yolo` - Pure YOLO mode
-- `claude-safe` - Airbag mode
-- `claude-router` - Smart routing mode
-```
 
 ### Additional Commands
 

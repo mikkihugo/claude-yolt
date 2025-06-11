@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { findClaudeInstallation, modifyClaudeForYolo, checkForClaudeUpdates, activateYoloMode } from '../lib/yolo.js';
+import { checkFirstRunConsent } from '../lib/consent.js';
 import fs from 'fs';
-import readline from 'readline';
+import path from 'path';
 
 // ANSI color codes
 const RED = '\x1b[31m';
@@ -11,57 +12,21 @@ const CYAN = '\x1b[36m';
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
 
-// Check for consent
-async function checkConsent(consentPath) {
-  if (fs.existsSync(consentPath)) {
-    return true;
-  }
-  
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-  
-  console.log(`\n${BOLD}${YELLOW}🔥 CLAUDE-YOLT YOLO MODE CONSENT REQUIRED 🔥${RESET}\n`);
-  console.log(`${CYAN}----------------------------------------${RESET}`);
-  console.log(`${BOLD}What is YOLO mode?${RESET}`);
-  console.log(`This mode ${RED}BYPASSES ALL SAFETY CHECKS${RESET} by automatically adding`);
-  console.log(`the --dangerously-skip-permissions flag to Claude CLI.\n`);
-  
-  console.log(`${BOLD}${RED}⚠️ WARNING ⚠️${RESET}`);
-  console.log(`This bypasses important safety checks designed to protect`);
-  console.log(`your system and privacy. Use at your own risk!\n`);
-  
-  return new Promise((resolve) => {
-    rl.question(`${YELLOW}Do you consent to using YOLO mode? (yes/no): ${RESET}`, (answer) => {
-      rl.close();
-      const consent = answer.toLowerCase().trim() === 'yes' || answer.toLowerCase().trim() === 'y';
-      if (consent) {
-        fs.writeFileSync(consentPath, 'yolo-consent');
-        console.log(`\n${YELLOW}🔥 YOLO MODE APPROVED 🔥${RESET}`);
-      } else {
-        console.log(`\n${CYAN}YOLO mode not activated.${RESET}`);
-      }
-      resolve(consent);
-    });
-  });
-}
-
 // Main
 async function main() {
   try {
+    // Check consent (using same consent as claude-yolt since it's the same warning)
+    const consentPath = path.join(process.env.HOME, '.claude-yolt', 'consent.json');
+    const hasConsent = await checkFirstRunConsent(consentPath);
+    if (!hasConsent) {
+      process.exit(1);
+    }
+    
     // Check for updates
     await checkForClaudeUpdates();
     
     // Find Claude installation
     const { claudeDir, originalCliPath, yoloCliPath, isLocal } = findClaudeInstallation();
-    
-    // Check consent
-    const consentPath = `${process.env.HOME}/.claude-yolt/yolo-consent`;
-    const consent = await checkConsent(consentPath);
-    if (!consent) {
-      process.exit(1);
-    }
     
     // Create modified CLI if needed
     if (!fs.existsSync(yoloCliPath)) {
