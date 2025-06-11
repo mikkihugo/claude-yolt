@@ -5,19 +5,27 @@
   "type": "module",
   "main": "index.js",
   "bin": {
-    "claude-yolt": "./bin/claude-yolt",
-    "claude-yolo": "./bin/claude-yolo",
-    "claude-007": "./bin/claude-yolt",
-    "claude-airbag": "./bin/claude-airbag",
-    "claude-seatbelt": "./bin/claude-seatbelt",
-    "claude-router": "./bin/claude-router",
-    "claude-yolt-ui": "./bin/claude-ui",
-    "claude-yolt-api": "./bin/claude-api",
-    "cyolt": "./bin/claude"
+    "claude-yolt": "bin/claude-yolt",
+    "claude-yolo": "bin/claude-yolo",
+    "claude-007": "bin/claude-yolt",
+    "claude-airbag": "bin/claude-airbag",
+    "claude-seatbelt": "bin/claude-seatbelt",
+    "claude-router": "bin/claude-router",
+    "claude-yolt-ui": "bin/claude-ui",
+    "claude-yolt-api": "bin/claude-api",
+    "cyolt": "bin/claude"
   },
   "scripts": {
-    "postinstall": "node postinstall.js && cargo build --release --manifest-path rust/Cargo.toml || true",
-    "test": "node test.js"
+    "build": "node build.js",
+    "postinstall": "node postinstall.js",
+    "test": "node test.js",
+    "start": "node bin/claude-yolt",
+    "dev": "NODE_ENV=development node bin/claude-yolt",
+    "lint": "eslint . --ext .js,.mjs",
+    "test:integration": "node test/integration.js",
+    "test:coverage": "c8 npm test",
+    "test:smoke": "node test/smoke.js",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "claude",
@@ -31,18 +39,33 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mikkihugo/claude-yolt.git"
+    "url": "git+https://github.com/mikkihugo/claude-yolt.git"
   },
   "dependencies": {
+    "@anthropic-ai/claude-code": "latest",
     "chalk": "^5.3.0",
     "cli-spinners": "^2.9.0",
-    "ora": "^6.3.1",
     "commander": "^12.0.0",
     "express": "^4.18.2",
+    "ora": "^6.3.1",
     "uuid": "^9.0.1",
-    "@anthropic-ai/claude-code": "latest"
+    "prom-client": "^15.0.0",
+    "winston": "^3.11.0",
+    "winston-elasticsearch": "^0.17.4"
   },
   "engines": {
     "node": ">=14.0.0"
-  }
+  },
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.1",
+    "typescript": "^5.8.3"
+  },
+  "bugs": {
+    "url": "https://github.com/mikkihugo/claude-yolt/issues"
+  },
+  "homepage": "https://github.com/mikkihugo/claude-yolt#readme"
 }

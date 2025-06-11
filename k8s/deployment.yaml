@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-yolt
+  labels:
+    app: claude-yolt
+    version: v1
+spec:
+  replicas: 1  # Single instance per namespace for process management
+  strategy:
+    type: Recreate  # Prevent multiple instances
+  selector:
+    matchLabels:
+      app: claude-yolt
+  template:
+    metadata:
+      labels:
+        app: claude-yolt
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: claude-yolt
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: claude-yolt
+        image: claude-yolt:latest
+        imagePullPolicy: Always
+        ports:
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        env:
+        - name: CLAUDE_MAX_PROCESSES
+          value: "200"
+        - name: CLAUDE_PROCESS_DELAY
+          value: "25"
+        - name: NODE_ENV
+          value: production
+        - name: LOG_LEVEL
+          value: info
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: claude-secrets
+              key: api-key
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - name: auth-storage
+          mountPath: /home/claude/.claude-yolt/auth
+          readOnly: false
+        - name: logs
+          mountPath: /var/log/claude-yolt
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+            add:
+            - NET_BIND_SERVICE
+      volumes:
+      - name: auth-storage
+        persistentVolumeClaim:
+          claimName: claude-auth-pvc
+      - name: logs
+        emptyDir:
+          sizeLimit: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-yolt-metrics
+  labels:
+    app: claude-yolt
+spec:
+  selector:
+    app: claude-yolt
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claude-yolt
+  labels:
+    app: claude-yolt
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: claude-yolt-pdb
+spec:
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: claude-yolt

@@ -1,0 +1,47 @@
+[Unit]
+Description=Claude YOLT Process Manager
+Documentation=https://github.com/mikkihugo/claude-yolt
+After=network.target
+Wants=claude-yolt-monitor.service
+
+[Service]
+Type=forking
+PIDFile=/var/run/claude-yolt/claude-yolt.pid
+ExecStartPre=/usr/bin/claude-yolt --health-check
+ExecStart=/usr/bin/claude-yolt --daemon
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -TERM $MAINPID
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+LimitCORE=0
+MemoryMax=8G
+CPUQuota=200%
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/claude-yolt /var/log/claude-yolt
+RuntimeDirectory=claude-yolt
+StateDirectory=claude-yolt
+LogsDirectory=claude-yolt
+
+# Process management
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitInterval=300
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+SendSIGKILL=yes
+
+# Monitoring
+WatchdogSec=30
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target

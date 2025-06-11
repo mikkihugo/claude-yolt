@@ -3,14 +3,31 @@
 import { findClaudeInstallation, modifyClaudeForYolo, checkForClaudeUpdates } from '../lib/yolo.js';
 import { SAFETY_MODES, applyResourceLimits, monitorProcess } from '../lib/safety.js';
 import { checkFirstRunConsent } from '../lib/consent.js';
-import { spawn } from 'child_process';
+import { applySystemLimits, createLimitedWrapper } from '../lib/system-limits.js';
+import { injectOptimizedInterceptor } from '../lib/process-interceptor-optimized.js';
+import { authManager } from '../lib/auth-manager.js';
+import { bugWorkarounds } from '../lib/bug-workarounds.js';
+import { spawn, execSync } from 'child_process';
 import chalk from 'chalk';
 import fs from 'fs';
 import path from 'path';
+import { EventEmitter } from 'events';
+
+// Increase max listeners to prevent warning
+EventEmitter.defaultMaxListeners = 50;
 
 // Main
 async function main() {
   try {
+    // Apply bug workarounds first
+    await bugWorkarounds.autoFix();
+    bugWorkarounds.startMonitoring();
+    
+    // Try to load saved auth
+    if (!authManager.injectAuth()) {
+      console.log(chalk.yellow('⚠️  No saved auth found. You may need to login.'));
+    }
+    
     // Check consent on first run
     const consentPath = path.join(process.env.HOME, '.claude-yolt', 'consent.json');
     const hasConsent = await checkFirstRunConsent(consentPath);
@@ -29,8 +46,17 @@ async function main() {
       modifyClaudeForYolo(originalCliPath, yoloCliPath, isLocal);
     }
     
+    // Inject optimized process interceptor
+    injectOptimizedInterceptor();
+    
+    // Use the YOLO CLI directly (interceptor handles limits)
+    const limitedCliPath = yoloCliPath;
+    
     // Get safety limits
     const limits = SAFETY_MODES.yolt;
+    
+    // Apply system-level resource limits
+    const limitCommands = applySystemLimits(limits);
     
     // Apply environment limits
     const env = {
@@ -45,8 +71,14 @@ async function main() {
     // If no args provided, Claude CLI will show its own UI/prompt
     // Otherwise it processes the command/prompt
     
-    // Spawn Claude with safety limits
-    const child = spawn('node', [yoloCliPath, ...args], {
+    // Spawn Claude with safety limits using bash to apply ulimits
+    const child = spawn('bash', ['-c', `
+      # Apply resource limits
+      ${limitCommands}
+      
+      # Run Claude with process limiter
+      exec node "${limitedCliPath}" ${args.map(a => `"${a}"`).join(' ')}
+    `], {
       env,
       stdio: 'inherit'
     });

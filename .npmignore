@@ -1,0 +1,32 @@
+# Development files
+*.log
+*.pid
+.env
+.env.*
+node_modules/
+coverage/
+.nyc_output/
+.git/
+.github/
+test/
+tests/
+docs/
+examples/
+
+# Build files
+rust-process-manager/target/
+rust-process-manager/Cargo.lock
+*.rs
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Session files
+SESSION.md

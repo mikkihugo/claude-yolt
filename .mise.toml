@@ -1,0 +1,55 @@
+[tools]
+node = "20"
+rust = "latest"
+
+[env]
+CLAUDE_MAX_PROCESSES = "200"
+CLAUDE_PROCESS_DELAY = "25"
+NODE_OPTIONS = "--max-old-space-size=4096"
+
+[tasks.build]
+description = "Build claude-yolt"
+run = """
+npm install
+npm run build
+"""
+
+[tasks.install]
+description = "Install claude-yolt globally"
+run = """
+npm run build
+cd dist && npm link
+"""
+
+[tasks.dev]
+description = "Run in development mode"
+run = "npm run dev"
+
+[tasks.test]
+description = "Run tests"
+run = "npm test"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = """
+rm -rf dist/
+rm -rf node_modules/
+rm -rf rust-process-manager/target/
+"""
+
+[tasks.fix-rust]
+description = "Fix Rust build issues"
+run = """
+cd rust-process-manager
+cargo fmt
+cargo clippy --fix --allow-dirty
+cargo build --release
+"""
+
+[tasks.setup]
+description = "Complete setup"
+depends = ["build", "install"]
+run = """
+echo "✅ claude-yolt installed successfully!"
+echo "Run 'claude-yolt --help' to get started"
+"""

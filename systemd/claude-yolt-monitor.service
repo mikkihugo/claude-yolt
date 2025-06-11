@@ -1,0 +1,20 @@
+[Unit]
+Description=Claude YOLT Health Monitor
+BindsTo=claude-yolt.service
+After=claude-yolt.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/claude-yolt-monitor
+Restart=always
+RestartSec=10
+
+# Run as same user but more restricted
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=claude-yolt.service

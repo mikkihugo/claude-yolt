@@ -9,6 +9,25 @@ Unified Claude CLI wrapper combining the best of three projects:
 
 On first run, claude-yolt displays a safety warning about bypassing Claude's security features. You have 10 seconds to respond, or it proceeds automatically. This warning appears only once.
 
+## 🐢 Process Limiting & Hang Prevention
+
+claude-yolt fixes Claude CLI's process issues:
+
+### Why Processes Hang in Claude:
+1. **No stream draining**: Processes fill stdout/stderr buffers and deadlock
+2. **Zombie processes**: Exit status not collected, processes stay in zombie state
+3. **No stdin closure**: Processes wait forever for input that never comes
+4. **Missing signal handling**: Child processes not cleaned up on parent exit
+
+### Our Fixes:
+- **Soft queueing** at 200 processes (no hard failures - just waits)
+- **No ulimit -u** (would cause "Resource temporarily unavailable" errors)
+- Automatic stream draining to prevent buffer deadlock (fixes #1970)
+- Proper stdin/stdout/stderr handling
+- Fast hang detection: fd >10s, rg >15s with <5% CPU = killed
+- Process interceptor patches child_process module directly
+- Search tools (`fd`/`rg`) limited to single thread + result limits
+
 ## Installation
 
 ```bash
@@ -48,7 +67,7 @@ npm install -g claude-yolt
 
 ### Primary Command: claude-yolt
 
-`claude-yolt` is a drop-in replacement for `claude` that mirrors all Claude CLI behavior:
+`claude-yolt` is a drop-in replacement for `claude-code` that mirrors all Claude Code behavior:
 
 ```bash
 # If prompt provided, executes it
@@ -96,12 +115,25 @@ cyolt --router "smart routing"
 
 ## Safety Comparison
 
-| Mode | Permissions | CPU Limit | Memory | Processes |
-|------|------------|-----------|---------|-----------|
-| claude-yolo | Bypassed | None | None | None |
-| claude-yolt | Bypassed | 30 min | 4GB | Monitored |
-| claude-airbag | Bypassed | 5 min | 2GB | Strict |
-| claude-router | Varies | Varies | Varies | Varies |
+| Mode | Permissions | CPU Limit | Memory | Max Processes | Cargo Jobs |
+|------|------------|-----------|---------|---------------|------------|
+| claude-yolo | Bypassed | None | None | None | Unlimited |
+| claude-yolt | Bypassed | 30 min | 4GB | 200 (queue) | 4 |
+| claude-airbag | Bypassed | 5 min | 2GB | 20 | 1 |
+| claude-router | Varies | Varies | Varies | Varies | Varies |
+
+### Process Control Features
+
+- **Smart queueing**: Never kills processes - queues them when limit reached
+- **Process interception**: Patches Claude's child_process module directly
+- **Rust explosion prevention**: Limits concurrent rust processes, queues extras
+- **Search tool limiting**: Forces `fd` and `rg` to single-threaded mode
+- **Cargo job control**: Forces `--jobs 4` flag on all cargo commands
+- **Build tool limits**: Controls make, cmake, ninja parallelism via env vars
+- **Emergency kill**: Kills fd/rg if >10 processes, cargo/rustc if >50
+- **Transparent operation**: Claude CLI and commands work normally, just slower
+- **Nice level**: All processes run at lower priority
+- **No failures**: Commands wait in queue instead of failing
 
 ## Configuration
 
@@ -119,6 +151,22 @@ Create `~/.claude-yolt/config.json`:
     "memory": "4GB"
   }
 }
+```
+
+### Environment Variables
+
+```bash
+# Process limiting (soft queue, not hard limit)
+export CLAUDE_MAX_PROCESSES=200  # Start queueing at this count (default: 200)
+export CLAUDE_PROCESS_DELAY=25   # Delay between spawns in ms (default: 25)
+
+# For extreme cases (system already overloaded)
+export CLAUDE_MAX_PROCESSES=50   # Much lower limit
+export CLAUDE_PROCESS_DELAY=100  # Slower spawning
+
+# Example: More aggressive limiting for constrained systems
+export CLAUDE_MAX_PROCESSES=100
+export CLAUDE_PROCESS_DELAY=50
 ```
 
 ## Architecture
@@ -140,6 +188,30 @@ Built on the shoulders of:
 - [claude-yolo](https://github.com/eastlondoner/claude-yolo) by eastlondoner
 - [claude-safer](https://github.com/mikkihugo/claude-safer) by mikkihugo
 - [claude-safer-rs](https://github.com/mikkihugo/claude-safer-rs) by mikkihugo
+
+## Related Issues
+
+- [Claude Code #1970](https://github.com/anthropics/claude-code/issues/1970) - Process explosion bug this wrapper fixes
+- Prevents MaxListenersExceededWarning
+- Prevents system hangs from fd/rg deadlocks
+- Prevents memory exhaustion from process explosions
+
+## Known Issues Fixed
+
+### Process Explosions (GitHub Issue #1970)
+claude-yolt fixes these Claude Code issues:
+
+1. **Cargo/Rust builds**: Spawning 4000+ processes → Limited to 200 concurrent
+2. **fd searches**: Multi-threaded fd killing systems → Forced single-threaded  
+3. **rg (ripgrep)**: Similar threading issues → Limited to 1 thread
+4. **Build parallelism**: Uncontrolled make -j → Limited to 4 jobs
+5. **MaxListenersExceededWarning**: Too many abort listeners → Proper cleanup
+6. **Pipe buffer deadlock**: Unread stdout fills up → Auto-draining streams
+
+### UI Compatibility
+- Login prompts work normally (just rate-limited)
+- Interactive commands function correctly
+- All Claude CLI features preserved
 
 ## License
 
