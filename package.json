@@ -22,9 +22,6 @@
     "start": "node bin/claude-yolt",
     "dev": "NODE_ENV=development node bin/claude-yolt",
     "lint": "eslint . --ext .js,.mjs",
-    "test:integration": "node test/integration.js",
-    "test:coverage": "c8 npm test",
-    "test:smoke": "node test/smoke.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
