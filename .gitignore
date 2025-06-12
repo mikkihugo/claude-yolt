@@ -3,7 +3,9 @@ node_modules/
 
 # Rust build artifacts
 rust/target/
+rust-process-manager/target/
 rust/Cargo.lock
+rust-process-manager/Cargo.lock
 
 # Config and consent files
 .claude-yolt/
