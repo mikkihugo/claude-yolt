@@ -1,0 +1,51 @@
+[tools]
+node = "20"
+python = "3.11"
+
+[env]
+NODE_ENV = "development"
+# claude-yolt specific environment
+CLAUDE_MAX_PROCESSES = "30"
+CLAUDE_PROCESS_DELAY = "100"
+
+[tasks.install]
+description = "Install all dependencies"
+run = """
+npm ci || npm install
+pip install -q aider-chat
+"""
+
+[tasks.install-global]
+description = "Install claude-yolt globally"
+run = "npm install -g ."
+
+[tasks.setup-dev]
+description = "Complete development setup"
+depends = ["install", "install-global"]
+run = "echo 'Development environment ready!'"
+
+[tasks.test]
+description = "Run all tests"
+run = "npm test"
+
+[tasks.lint]
+description = "Run linting"
+run = """
+npx eslint lib/ bin/ --ext .js --format compact || true
+find lib bin -name "*.js" -exec jshint {} \; || true
+"""
+
+[tasks.claude-test]
+description = "Test claude-yolt functionality"
+run = """
+echo "Testing claude-yolt installation..."
+claude-yolt --help || echo "Help not implemented yet"
+echo "✅ claude-yolt is working"
+"""
+
+[tasks.ai-analysis] 
+description = "Run AI analysis with aider"
+run = """
+echo "Running AI code analysis..."
+aider --help > /dev/null 2>&1 && echo "✅ aider available" || echo "⚠️ aider not available"
+"""

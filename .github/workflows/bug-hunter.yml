@@ -27,11 +27,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Install dependencies and tools
       run: |
-        npm ci || npm install
-        npm install -g .
-        pip install -q aider-chat
+        mise run install
+        mise run install-global
 
     - name: Memory Leak Detection
       if: github.event.inputs.focus_area == 'memory-leaks' || github.event.inputs.focus_area == ''

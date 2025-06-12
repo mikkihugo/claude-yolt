@@ -31,11 +31,27 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup Enterprise Tools
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm
+          ~/.cache/pip
+          node_modules
+        key: deps-${{ runner.os }}-${{ hashFiles('mise.toml', '**/package-lock.json') }}
+        restore-keys: |
+          deps-${{ runner.os }}-
+        
+    - name: Install dependencies and tools
       run: |
-        npm ci || npm install
-        npm install -g .
-        pip install -q aider-chat
+        mise run install
+        mise run install-global
         # Install additional architecture analysis tools
         npm install -g madge dependency-cruiser
 
