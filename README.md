@@ -94,34 +94,14 @@ docker run --rm -it node:20 bash
 - Systems with sensitive data
 - Your personal computer
 
-## ⚠️ Dangerous Features (TESTING ONLY)
+## ⚠️ What claude-yolt Does (TESTING ONLY)
 
-### 🚀 YOLT (claude-yolo)
-- Bypasses all permission checks
-- Auto-updates Claude CLI
-- Requires one-time consent
-
-### 🛡️ Safety Modes (claude-yolt/claude-007)
-- YOLT + resource limits
-- CPU time limits (5-30 minutes)
-- Memory limits (2-4GB)
-- Process monitoring
-
-### 🪂 Airbag Mode (claude-airbag)
-- Strictest safety limits
-- 2GB memory max
-- 5 minute CPU time
-- Ideal for untrusted code
-
-### 🔧 Seatbelt Wrapper (claude-seatbelt)
-- Wrap any command with safety limits
-- Example: `claude-seatbelt cargo build`
-
-### 🧠 Smart Router (claude-router)
-- Routes to cheapest option:
-  1. Local tools (lint, format)
-  2. Free AI models (Ollama, GitHub Models)
-  3. Claude CLI (complex tasks only)
+- **Bypasses all permission checks** (no security prompts)
+- **Auto-updates Claude CLI** when needed
+- **Process limits**: Max 200 concurrent (queues extras)
+- **Resource limits**: 4GB RAM, 30min CPU time
+- **Hang prevention**: Kills 0% CPU processes after 10s
+- **Stream handling**: Prevents pipe buffer deadlock
 
 ## Usage
 
@@ -149,40 +129,8 @@ claude-yolt --output result.txt "analyze this"
 ```
 
 
-### Additional Commands
 
-```bash
-# Pure YOLT (no safety limits)
-claude-yolo "fix this code"
-
-# Maximum safety mode
-claude-airbag "analyze untrusted code"
-
-# Smart routing to save money
-claude-router "format this file"
-
-# Wrap any command with safety limits
-claude-seatbelt npm test
-
-# Interactive UI (similar to claude with no args)
-claude-yolt-ui
-
-# Unified command with mode selection
-cyolt --yolo "no limits"
-cyolt --safe "maximum safety"
-cyolt --router "smart routing"
-```
-
-## Safety Comparison
-
-| Mode | Permissions | CPU Limit | Memory | Max Processes | Cargo Jobs |
-|------|------------|-----------|---------|---------------|------------|
-| claude-yolo | Bypassed | None | None | None | Unlimited |
-| claude-yolt | Bypassed | 30 min | 4GB | 200 (queue) | 4 |
-| claude-airbag | Bypassed | 5 min | 2GB | 20 | 1 |
-| claude-router | Varies | Varies | Varies | Varies | Varies |
-
-### Process Control Features
+## Process Control Features
 
 - **Smart queueing**: Never kills processes - queues them when limit reached
 - **Process interception**: Patches Claude's child_process module directly
@@ -196,22 +144,6 @@ cyolt --router "smart routing"
 - **No failures**: Commands wait in queue instead of failing
 
 ## Configuration
-
-Create `~/.claude-yolt/config.json`:
-
-```json
-{
-  "defaultMode": "yolt",
-  "router": {
-    "preferLocal": true,
-    "freeModels": ["ollama", "github"]
-  },
-  "limits": {
-    "cpu": 1800,
-    "memory": "4GB"
-  }
-}
-```
 
 ### Environment Variables
 
