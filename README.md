@@ -1,13 +1,59 @@
-# claude-yolt 🎯
+```
+☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️
+⚠️                    EXTREME DANGER                     ⚠️
+⚠️         THIS SOFTWARE BYPASSES ALL SECURITY          ⚠️
+⚠️              FOR TESTING ONLY - NOT SAFE             ⚠️
+☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️☠️
+```
 
-Unified Claude CLI wrapper combining the best of three projects:
-- **YOLO mode** from claude-yolo (bypass permissions)
-- **Safety features** from claude-safer (resource limits)
-- **Intelligent routing** from claude-safer-rs (cost optimization)
+# ☠️⚠️☠️ DANGER: claude-yolt - EXPERIMENTAL SECURITY BYPASS TOOL ☠️⚠️☠️
 
-## ⚠️ Safety Warning
+## 🚨 CRITICAL SECURITY WARNING 🚨
 
-On first run, claude-yolt displays a safety warning about bypassing Claude's security features. You have 10 seconds to respond, or it proceeds automatically. This warning appears only once.
+**THIS SOFTWARE IS DANGEROUS AND NOT FOR PRODUCTION USE**
+
+### ☠️ DO NOT USE THIS SOFTWARE IF:
+- You have production data on your system
+- You are on a shared/multi-user system
+- You have sensitive information accessible
+- You are connected to the internet
+- You care about system stability
+
+### ☠️💀 THIS SOFTWARE WILL:
+- **BYPASS ALL SECURITY CHECKS** in Claude Code
+- **DISABLE PERMISSION PROMPTS** without your consent
+- **MODIFY SYSTEM BEHAVIOR** in unpredictable ways
+- **POTENTIALLY CRASH YOUR SYSTEM** with process explosions
+- **CAUSE DATA LOSS** if processes are killed
+
+### ✅ ONLY USE IN:
+- Isolated, airgapped test environments
+- Throwaway VMs that can be destroyed
+- Systems with no important data
+- Environments where security doesn't matter
+
+**☠️ YOU HAVE BEEN WARNED. USE AT YOUR OWN RISK. ☠️**
+
+---
+
+## What This Is
+
+**claude-yolt** is an experimental proof-of-concept created to demonstrate critical bugs in Claude Code's process management. It is **NOT** a production tool.
+
+This tool exists solely to:
+1. Demonstrate the process explosion bug (Anthropic Claude Code #1970)
+2. Test potential workarounds in isolated environments
+3. Show why Claude Code is unsafe for production use
+
+## 🚫 SECURITY BYPASS WARNING
+
+This tool **COMPLETELY BYPASSES** Claude's security model:
+- No permission prompts
+- No safety checks
+- No user consent required
+- Automatic approval of all operations
+
+**This is equivalent to running everything as root with no password.**
 
 ## 🐢 Process Limiting & Hang Prevention
 
@@ -28,21 +74,35 @@ claude-yolt fixes Claude CLI's process issues:
 - Process interceptor patches child_process module directly
 - Search tools (`fd`/`rg`) limited to single thread + result limits
 
-## Installation
+## ⚠️ Installation (AT YOUR OWN RISK)
+
+**ONLY INSTALL IN ISOLATED TEST ENVIRONMENTS:**
 
 ```bash
+# DANGER: This will compromise your system security
+# ONLY for testing in airgapped, isolated environments
 npm install -g claude-yolt
+
+# Safer: Run in isolated container
+docker run --rm -it node:20 bash
+# Then install inside container only
 ```
 
-## Features
+**DO NOT INSTALL ON:**
+- Production systems
+- Development machines with access to production
+- Systems with sensitive data
+- Your personal computer
 
-### 🚀 YOLO Mode (claude-yolo)
+## ⚠️ Dangerous Features (TESTING ONLY)
+
+### 🚀 YOLT (claude-yolo)
 - Bypasses all permission checks
 - Auto-updates Claude CLI
 - Requires one-time consent
 
 ### 🛡️ Safety Modes (claude-yolt/claude-007)
-- YOLO + resource limits
+- YOLT + resource limits
 - CPU time limits (5-30 minutes)
 - Memory limits (2-4GB)
 - Process monitoring
@@ -92,7 +152,7 @@ claude-yolt --output result.txt "analyze this"
 ### Additional Commands
 
 ```bash
-# Pure YOLO mode (no safety limits)
+# Pure YOLT (no safety limits)
 claude-yolo "fix this code"
 
 # Maximum safety mode
@@ -185,9 +245,13 @@ claude-yolt/
 ## Credits
 
 Built on the shoulders of:
-- [claude-yolo](https://github.com/eastlondoner/claude-yolo) by eastlondoner
+- [claude-yolo](https://github.com/eastlondoner/claude-yolo) by [eastlondoner (Andrew Jefferson)](https://github.com/eastlondoner) - The original YOLO mode implementation that inspired this project
 - [claude-safer](https://github.com/mikkihugo/claude-safer) by mikkihugo
 - [claude-safer-rs](https://github.com/mikkihugo/claude-safer-rs) by mikkihugo
+
+🙏 **Special thanks to [eastlondoner (Andrew Jefferson)](https://github.com/eastlondoner)** for creating the original [claude-yolo](https://github.com/eastlondoner/claude-yolo) tool that pioneered the concept of bypassing Claude's permission system. This project (claude-yolt) extends that brilliant idea with critical process management fixes for Claude Code's stability issues.
+
+The name "yolt" is a homage to the original "yolo" - because sometimes you just need to make things work! 🚀
 
 ## Related Issues
 
@@ -213,6 +277,40 @@ claude-yolt fixes these Claude Code issues:
 - Interactive commands function correctly
 - All Claude CLI features preserved
 
+## ⚠️ Legal Disclaimer
+
+**DISCLAIMER OF ALL WARRANTIES AND LIABILITY**
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE.
+
+BY USING THIS SOFTWARE, YOU ACKNOWLEDGE THAT:
+1. You understand this is experimental, dangerous software
+2. You accept all risks of data loss, system instability, and security breaches
+3. You will not use this in production or on systems with sensitive data
+4. You will not hold the authors liable for any damages
+5. You are using this solely for testing bugs in isolated environments
+
+This software is **NOT**:
+- Endorsed by Anthropic
+- Safe for production use
+- A legitimate security tool
+- Intended for real work
+
+## Emergency Recovery
+
+When (not if) this tool causes problems:
+
+```bash
+# Kill all spawned processes
+pkill -f '(fd|rg|cargo|rustc|claude)'
+
+# Check for runaway processes
+ps aux | grep -E '(claude|cargo|fd|rg)' | wc -l
+
+# Nuclear option - reboot
+sudo reboot
+```
+
 ## License
 
-MIT
+MIT - But seriously, this is a bug demonstration tool. Do not use in production.

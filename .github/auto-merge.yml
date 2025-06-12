@@ -1,0 +1,13 @@
+# Configuration for auto-merge bot
+# Automatically merge dependabot PRs
+
+- match:
+    dependency_type: "all"
+    update_type: "all"
+- match:
+    author: "dependabot[bot]"
+    update_type: "semver:patch"
+- match:
+    author: "dependabot[bot]"
+    update_type: "semver:minor"
+    package_type: "dependencies"

@@ -33,8 +33,8 @@ async function main() {
       modifyClaudeForYolo(originalCliPath, yoloCliPath, isLocal);
     }
     
-    // Show YOLO message
-    console.log(`${YELLOW}🔥 YOLO MODE ACTIVATED 🔥${RESET}`);
+    // Show YOLT message
+    console.log(`${YELLOW}🔥 YOLT ACTIVATED 🔥${RESET}`);
     
     // Pass all args to modified CLI
     process.argv.splice(2, 0, '--dangerously-skip-permissions');

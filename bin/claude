@@ -17,7 +17,7 @@ program
   .option('-m, --mode <mode>', 'Mode: yolo, yolt, airbag, router', config.defaultMode)
   .option('-s, --safe', 'Use airbag mode (maximum safety)')
   .option('-r, --router', 'Use smart routing mode')
-  .option('-y, --yolo', 'Use pure YOLO mode (no limits)')
+  .option('-y, --yolo', 'Use pure YOLT (no limits)')
   .option('--memory <mb>', 'Memory limit in MB', parseInt)
   .option('--cpu <seconds>', 'CPU time limit in seconds', parseInt)
   .option('--set-default <mode>', 'Set default mode')
@@ -55,7 +55,7 @@ program
     
     // Show mode info
     const modeInfo = {
-      yolo: chalk.red('🔥 YOLO mode - no limits'),
+      yolo: chalk.red('🔥 YOLT - no limits'),
       yolt: chalk.cyan('🎯 YOLT mode - YOLO + safety'),
       airbag: chalk.yellow('🪂 Airbag mode - maximum safety'),
       router: chalk.blue('🧠 Router mode - smart routing')

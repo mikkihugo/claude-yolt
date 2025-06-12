@@ -58,7 +58,7 @@ console.log(chalk.green('✓ Made bin files executable'));
 
 console.log(chalk.green('\n✨ Setup complete!\n'));
 console.log(chalk.cyan('Available commands:'));
-console.log('  claude-yolo    - Pure YOLO mode (no limits)');
+console.log('  claude-yolo    - Pure YOLT (no limits)');
 console.log('  claude-yolt    - YOLO with safety (recommended)');
 console.log('  claude-airbag  - Maximum safety');
 console.log('  claude-seatbelt - Wrap any command with safety');
