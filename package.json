@@ -1,7 +1,7 @@
 {
   "name": "claude-yolt",
   "version": "0.0.3-alpha",
-  "description": "Unified Claude CLI wrapper: YOLO mode + safety limits + intelligent routing",
+  "description": "Unified Claude CLI wrapper: YOLT + safety limits + intelligent routing",
   "type": "module",
   "main": "index.js",
   "bin": {
@@ -27,10 +27,12 @@
   "keywords": [
     "claude",
     "cli",
-    "yolo",
+    "yolt",
     "safety",
     "router",
-    "ai"
+    "ai",
+    "process-manager",
+    "bug-fix"
   ],
   "author": "mikkihugo",
   "license": "MIT",
