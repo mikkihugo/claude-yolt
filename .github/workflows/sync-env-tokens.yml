@@ -1,0 +1,207 @@
+name: Sync Environment Tokens to Gist
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Sync action'
+        required: true
+        type: choice
+        default: 'upload'
+        options:
+          - upload
+          - download
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+
+permissions:
+  contents: read
+
+jobs:
+  sync-tokens:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'mikkihugo'
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        
+    - name: Upload Tokens to Gist
+      if: github.event.inputs.action == 'upload' || github.event_name == 'schedule'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        # Create environment tokens file
+        cat > env_tokens_backup.txt << 'EOF'
+        # Environment Tokens - Auto-synced from GitHub Actions
+        # Last updated: $(date)
+        
+        # OpenRouter - Free AI models
+        export OPENROUTER_API_KEY="${OPENROUTER_API_KEY}"
+        
+        # Google AI Studio - Gemini models
+        export GOOGLE_AI_API_KEY="${GOOGLE_AI_API_KEY}"
+        
+        # Hugging Face - Inference API
+        export HF_API_KEY="${HF_API_KEY}"
+        
+        # Anthropic Claude - For claude-yolt tool only
+        export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
+        
+        # GitHub Token (auto-managed)
+        export GITHUB_TOKEN="${GITHUB_TOKEN}"
+        
+        # Usage instructions:
+        # 1. Download this gist to ~/.env_tokens
+        # 2. Add to your shell: source ~/.env_tokens
+        # 3. Or add to ~/.bashrc: [ -f ~/.env_tokens ] && source ~/.env_tokens
+        EOF
+        
+        # Find or create gist
+        GIST_ID=$(gh gist list --public | grep "env_tokens" | head -1 | cut -f1)
+        
+        if [ -z "$GIST_ID" ]; then
+          echo "Creating new gist for environment tokens..."
+          GIST_ID=$(gh gist create env_tokens_backup.txt --description "Environment tokens for claude-yolt workflows" --public | grep -oE '[a-f0-9]{32}')
+          echo "Created gist: $GIST_ID"
+        else
+          echo "Updating existing gist: $GIST_ID"
+          gh gist edit $GIST_ID env_tokens_backup.txt
+        fi
+        
+        echo "Gist URL: https://gist.github.com/mikkihugo/$GIST_ID"
+        echo "Download command: curl -s https://gist.githubusercontent.com/mikkihugo/$GIST_ID/raw/env_tokens_backup.txt > ~/.env_tokens"
+
+    - name: Download Tokens from Gist
+      if: github.event.inputs.action == 'download'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Find existing gist
+        GIST_ID=$(gh gist list --public | grep "env_tokens" | head -1 | cut -f1)
+        
+        if [ -n "$GIST_ID" ]; then
+          echo "Downloading from gist: $GIST_ID"
+          gh gist view $GIST_ID --files
+          echo ""
+          echo "To download locally run:"
+          echo "curl -s https://gist.githubusercontent.com/mikkihugo/$GIST_ID/raw/env_tokens_backup.txt > ~/.env_tokens"
+          echo "source ~/.env_tokens"
+        else
+          echo "No environment tokens gist found"
+        fi
+
+    - name: Verify API Keys
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+        GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+      run: |
+        echo "## API Key Status Check" > api-status.md
+        echo "**Date**: $(date)" >> api-status.md
+        echo "" >> api-status.md
+        
+        # Test OpenRouter
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          echo "✅ OpenRouter API key configured" >> api-status.md
+          OR_STATUS=$(curl -s -w "%{http_code}" -o /dev/null "https://openrouter.ai/api/v1/models" \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY")
+          if [ "$OR_STATUS" = "200" ]; then
+            echo "✅ OpenRouter API key valid" >> api-status.md
+          else
+            echo "❌ OpenRouter API key invalid (HTTP $OR_STATUS)" >> api-status.md
+          fi
+        else
+          echo "⚠️ OpenRouter API key not configured" >> api-status.md
+        fi
+        
+        # Test Hugging Face
+        if [ -n "$HF_API_KEY" ]; then
+          echo "✅ Hugging Face API key configured" >> api-status.md
+          HF_STATUS=$(curl -s -w "%{http_code}" -o /dev/null "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium" \
+            -H "Authorization: Bearer $HF_API_KEY")
+          if [ "$HF_STATUS" = "200" ]; then
+            echo "✅ Hugging Face API key valid" >> api-status.md
+          else
+            echo "❌ Hugging Face API key invalid (HTTP $HF_STATUS)" >> api-status.md
+          fi
+        else
+          echo "⚠️ Hugging Face API key not configured" >> api-status.md
+        fi
+        
+        # Test Google AI
+        if [ -n "$GOOGLE_AI_API_KEY" ]; then
+          echo "✅ Google AI API key configured" >> api-status.md
+        else
+          echo "⚠️ Google AI API key not configured" >> api-status.md
+        fi
+        
+        cat api-status.md
+
+  setup-local-env:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'download'
+    steps:
+    - name: Generate Setup Instructions
+      run: |
+        cat > setup-instructions.md << 'EOF'
+        # Local Environment Setup Instructions
+        
+        ## 1. Download Environment Tokens
+        ```bash
+        # Download from gist to your home directory
+        curl -s https://gist.githubusercontent.com/mikkihugo/$(gh gist list --public | grep "env_tokens" | head -1 | cut -f1)/raw/env_tokens_backup.txt > ~/.env_tokens
+        
+        # Make sure the file was downloaded
+        ls -la ~/.env_tokens
+        ```
+        
+        ## 2. Load Environment Variables
+        ```bash
+        # Load immediately
+        source ~/.env_tokens
+        
+        # Add to your shell profile for automatic loading
+        echo '[ -f ~/.env_tokens ] && source ~/.env_tokens' >> ~/.bashrc
+        
+        # Or for zsh users
+        echo '[ -f ~/.env_tokens ] && source ~/.env_tokens' >> ~/.zshrc
+        ```
+        
+        ## 3. Verify API Keys Work
+        ```bash
+        # Test OpenRouter
+        curl -s "https://openrouter.ai/api/v1/models" -H "Authorization: Bearer $OPENROUTER_API_KEY" | jq '.data[0].id'
+        
+        # Test Hugging Face
+        curl -s "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium" -H "Authorization: Bearer $HF_API_KEY" | jq '.pipeline_tag'
+        
+        # Verify all variables are loaded
+        env | grep -E "(OPENROUTER|HF_|GOOGLE|ANTHROPIC)_API_KEY"
+        ```
+        
+        ## 4. Manage with Dotfiles (Recommended)
+        ```bash
+        # If using dotfiles repo (as per CLAUDE.md)
+        cd ~/.dotfiles
+        ln -sf ~/.env_tokens .env_tokens
+        git add .env_tokens
+        git commit -m "Add environment tokens"
+        git push
+        ```
+        
+        ## 5. Security Notes
+        - Environment tokens are stored in a public gist
+        - Only add tokens that are meant to be shared across your devices
+        - For sensitive tokens, use local-only files
+        - Rotate keys periodically for security
+        EOF
+        
+        cat setup-instructions.md

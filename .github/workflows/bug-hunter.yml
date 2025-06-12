@@ -63,7 +63,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' > bugs-memory.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Hunt for memory leaks: Maps/Sets cleanup, event listeners, closures, streams" \
                 lib/ --no-git --yes > bugs-memory.md
         else
@@ -79,7 +78,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model nousresearch/hermes-3-llama-3.1-405b:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Hunt for race conditions: shared state, async operations, process queue, concurrent Map/Set access" \
                 lib/process-interceptor.js lib/hang-detector.js --no-git --yes > bugs-races.md
         elif [ -n "$GITHUB_TOKEN" ]; then
@@ -108,7 +106,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model qwen/qwen-2.5-coder-32b-instruct:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Find error handling gaps: uncaught promises, missing try-catch, error swallowing, missing validation" \
                 lib/ --no-git --yes > bugs-errors.md
         elif [ -n "$GITHUB_TOKEN" ]; then
@@ -136,7 +133,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Find edge cases: empty inputs, null/undefined, circular deps, unicode filenames, long commands, process limit=0, large stdout, binary output" \
                 lib/ --no-git --yes > bugs-edges.md
         else
@@ -152,7 +148,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model nousresearch/hermes-3-llama-3.1-405b:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Find performance bottlenecks: O(n²) algorithms, blocking I/O, large string concat, inefficient data structures, missing caches" \
                 lib/ --no-git --yes > bugs-performance.md
         elif [ -n "$GITHUB_TOKEN" ]; then
@@ -194,7 +189,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' > bugs-security.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Find security vulnerabilities: command injection, path traversal, prototype pollution, input validation issues" \
                 lib/ --no-git --yes > bugs-security.md
         else
@@ -225,6 +219,7 @@ jobs:
     - name: Grok-3 Creative Bug Analysis
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
       run: |
         echo "" >> bug-report.md
         echo "## 🚀 Grok-3 Creative Bug Analysis" >> bug-report.md
@@ -245,10 +240,23 @@ jobs:
             }' | jq -r '.choices[0].message.content' >> bug-report.md 2>/dev/null || {
               echo "Grok-3 not available, using creative analysis fallback..." >> bug-report.md
               aider --model mistralai/mistral-large-2411:free \
-                    --openrouter-api-key "$OPENROUTER_API_KEY" \
                     --message "Think creatively about unusual bugs: timing issues, platform-specific problems, chaos scenarios, UX problems, emergent behaviors" \
                     --no-git --yes >> bug-report.md
             }
+        elif [ -n "$HF_API_KEY" ]; then
+          echo "Using Hugging Face for creative bug analysis..." >> bug-report.md
+          
+          # Use a code-focused model from Hugging Face
+          curl -s "https://api-inference.huggingface.co/models/microsoft/CodeT5p-770M" \
+            -H "Authorization: Bearer $HF_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "inputs": "Find creative and unusual bugs in this JavaScript process management code that other tools might miss. Focus on: race conditions, timing bugs, platform-specific issues, memory leaks, and chaos engineering scenarios.",
+              "parameters": {
+                "max_new_tokens": 400,
+                "temperature": 0.7
+              }
+            }' | jq -r '.generated_text // .error // "HF analysis failed"' >> bug-report.md 2>/dev/null || echo "Hugging Face analysis failed" >> bug-report.md
         else
           echo "Creative analysis skipped - no API key available" >> bug-report.md
         fi

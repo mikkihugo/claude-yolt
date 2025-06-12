@@ -79,6 +79,7 @@ jobs:
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
       run: |
         echo "## 🤖 Microsoft Phi-4 Advanced Code Analysis" >> linting-report.md
         echo "**Model**: microsoft/phi-4-${{ github.event.inputs.model_size || '14b' }}:free" >> linting-report.md
@@ -96,7 +97,7 @@ jobs:
           echo "**Files analyzed**: $(echo "$FILES" | wc -l)" >> linting-report.md
           echo "" >> linting-report.md
           
-          # Use Microsoft Phi-4 for advanced code analysis
+          # Use Microsoft Phi-4 for advanced code analysis with fallback chain
           if [ -n "$OPENROUTER_API_KEY" ]; then
             # Try different Phi-4 model sizes
             PHI_MODEL="microsoft/phi-4-${{ github.event.inputs.model_size || '14b' }}:free"
@@ -109,7 +110,6 @@ jobs:
                 
                 # Use aider with Phi-4 for detailed code analysis
                 aider --model "$PHI_MODEL" \
-                      --openrouter-api-key "$OPENROUTER_API_KEY" \
                       --message "Perform comprehensive code analysis for this JavaScript file. Focus on:
 
 1. **Code Quality Issues**: 
@@ -145,6 +145,29 @@ jobs:
 
 Provide specific line numbers and actionable fixes. Be concise but thorough." \
                       "$file" --no-git --yes 2>&1 | head -100 >> linting-report.md || echo "Analysis failed for $file" >> linting-report.md
+                
+                echo "" >> linting-report.md
+              fi
+            done
+          elif [ -n "$HF_API_KEY" ]; then
+            # Fallback to Hugging Face models
+            echo "Using Hugging Face models as fallback..." >> linting-report.md
+            
+            for file in $FILES; do
+              if [ -f "$file" ]; then
+                echo "### HF Analysis: $file" >> linting-report.md
+                
+                # Use Hugging Face Inference API for code analysis
+                curl -s "https://api-inference.huggingface.co/models/microsoft/DialoGPT-large" \
+                  -H "Authorization: Bearer $HF_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  -d '{
+                    "inputs": "Analyze this JavaScript code for quality issues, performance problems, and security concerns:\n\n'$(cat "$file" | head -50 | jq -Rs .)'",
+                    "parameters": {
+                      "max_new_tokens": 500,
+                      "temperature": 0.1
+                    }
+                  }' | jq -r '.generated_text // .error // "Analysis failed"' >> linting-report.md 2>/dev/null || echo "HF analysis failed for $file" >> linting-report.md
                 
                 echo "" >> linting-report.md
               fi
@@ -190,7 +213,6 @@ Provide specific line numbers and actionable fixes. Be concise but thorough." \
         if [ -n "$OPENROUTER_API_KEY" ]; then
           # Use a fast model for comparison analysis
           aider --model microsoft/phi-3-mini-128k-instruct:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Compare traditional linting (ESLint, JSHint) vs AI-powered analysis. Which issues did each catch? What did AI find that traditional tools missed? Summarize effectiveness." \
                 --no-git --yes < linting-report.md >> linting-report.md
         else
@@ -315,7 +337,6 @@ Provide specific line numbers and actionable fixes. Be concise but thorough." \
         if [ -n "$OPENROUTER_API_KEY" ]; then
           # Use specialized model for security analysis
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Perform deep security analysis of claude-yolt. Focus on:
                 
 1. **Command Injection**: spawn/exec calls with user input

@@ -61,6 +61,7 @@ jobs:
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
       run: |
         echo "## 🏗️ Enterprise Architecture Analysis" > enterprise-analysis.md
         echo "**Analysis Date**: $(date)" >> enterprise-analysis.md
@@ -95,7 +96,6 @@ jobs:
           # Editor: Code specialist for tactical implementation
           aider --architect deepseek/deepseek-r1:free \
                 --editor qwen/qwen-2.5-coder-32b-instruct:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "As enterprise architects, conduct comprehensive analysis of claude-yolt architecture. Architect should focus on strategic patterns, scalability, security. Editor should focus on code quality, implementation details. Focus: ${{ github.event.inputs.focus_area || 'full-analysis' }}" \
                 package.json lib/ --no-git --yes >> enterprise-analysis.md
         else
@@ -125,7 +125,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' >> enterprise-analysis.md 2>/dev/null || {
               echo "Grok-3 not available, using fallback strategic analysis..." >> enterprise-analysis.md
               aider --model nousresearch/hermes-3-llama-3.1-405b:free \
-                    --openrouter-api-key "$OPENROUTER_API_KEY" \
                     --message "Provide strategic enterprise insights: market positioning, competitive analysis, technology trends, business impact, innovation opportunities for claude-yolt" \
                     --no-git --yes >> enterprise-analysis.md
             }
@@ -151,7 +150,6 @@ jobs:
         if [ -n "$OPENROUTER_API_KEY" ]; then
           # Use reasoning model for technical debt analysis
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Analyze technical debt: code complexity, test coverage gaps, dependency issues, architectural debt, maintainability concerns. Prioritize by impact and effort." \
                 lib/ package.json --no-git --yes >> enterprise-analysis.md
         fi
@@ -165,7 +163,6 @@ jobs:
         if [ -n "$OPENROUTER_API_KEY" ]; then
           # Generate ADR for key architectural decisions
           aider --model cohere/command-r-plus-08-2024:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Generate Architecture Decision Records (ADRs) for key decisions in claude-yolt: process interception approach, queue implementation, stream handling, configuration management. Use standard ADR format." \
                 lib/ --no-git --yes > docs/adr/001-process-interception.md
         fi
@@ -181,7 +178,6 @@ jobs:
           # Use dual-mode for roadmap planning
           aider --architect nousresearch/hermes-3-llama-3.1-405b:free \
                 --editor mistralai/mistral-large-2411:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Create 18-month enterprise roadmap: Q1-Q6 milestones, feature priorities, technical improvements, scalability targets, security enhancements. Include effort estimates." \
                 --no-git --yes >> enterprise-analysis.md
         fi
