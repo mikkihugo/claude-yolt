@@ -24,8 +24,12 @@ jobs:
         
     - name: Install dependencies and tools
       run: |
-        mise run install
-        mise run install-global
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
+        npm install -g .
 
     - name: Profile Current Performance
       run: |

@@ -9,17 +9,26 @@ CLAUDE_MAX_PROCESSES = "30"
 CLAUDE_PROCESS_DELAY = "100"
 
 [tasks.install]
-description = "Install all dependencies"
+description = "Install local dependencies only"
 run = """
-# Install Node.js dependencies first (without build scripts)
-npm ci --ignore-scripts || npm install --ignore-scripts
+# Install Node.js dependencies (local, no global install)
+npm ci || npm install
 # Install Python dependencies
 pip install -q aider-chat
 """
 
 [tasks.install-global]
-description = "Install claude-yolt globally"
-run = "npm install -g ."
+description = "Install claude-yolt globally (separate from dependencies)"
+run = """
+# Skip if already installed globally
+if command -v claude-yolt >/dev/null 2>&1; then
+  echo "claude-yolt already installed globally"
+  claude-yolt --help 2>/dev/null || echo "claude-yolt installed but help not available"
+else
+  echo "Installing claude-yolt globally..."
+  npm install -g .
+fi
+"""
 
 [tasks.setup-dev]
 description = "Complete development setup"

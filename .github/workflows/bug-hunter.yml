@@ -35,8 +35,12 @@ jobs:
         
     - name: Install dependencies and tools
       run: |
-        mise run install
-        mise run install-global
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
+        npm install -g .
 
     - name: Memory Leak Detection
       if: github.event.inputs.focus_area == 'memory-leaks' || github.event.inputs.focus_area == ''

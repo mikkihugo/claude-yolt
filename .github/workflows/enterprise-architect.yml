@@ -50,10 +50,12 @@ jobs:
         
     - name: Install dependencies and tools
       run: |
-        mise run install
-        mise run install-global
-        # Install additional architecture analysis tools
-        npm install -g madge dependency-cruiser
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install global tools
+        npm install -g . madge dependency-cruiser
 
     - name: Enterprise Architect Analysis (Heavy Thinking)
       env:

@@ -49,12 +49,12 @@ jobs:
         
     - name: Install dependencies and tools
       run: |
-        mise run install
-        mise run install-global
-        
-        # Install linting tools
-        npm install -g eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
-        npm install -g jshint standard
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install global tools
+        npm install -g . eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin jshint standard
 
     - name: Traditional Linting (Baseline)
       run: |
