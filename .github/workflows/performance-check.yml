@@ -1,0 +1,202 @@
+name: Performance Analysis
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/process-interceptor.js'
+      - 'lib/stream-handler.js'
+      - 'lib/hang-detector.js'
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  performance-analysis:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run Performance Benchmarks
+      run: |
+        # Create simple benchmark
+        cat > benchmark.js << 'EOF'
+        import { spawn } from 'child_process';
+        import { performance } from 'perf_hooks';
+        
+        // Test process spawning performance
+        async function benchmarkProcessSpawning() {
+          const iterations = 100;
+          const start = performance.now();
+          
+          const promises = [];
+          for (let i = 0; i < iterations; i++) {
+            promises.push(new Promise((resolve) => {
+              const child = spawn('echo', ['test']);
+              child.on('close', resolve);
+            }));
+          }
+          
+          await Promise.all(promises);
+          const end = performance.now();
+          
+          return {
+            totalTime: end - start,
+            avgTime: (end - start) / iterations,
+            processCount: iterations
+          };
+        }
+        
+        // Run benchmark
+        console.log('Running performance benchmark...');
+        const results = await benchmarkProcessSpawning();
+        console.log(JSON.stringify(results, null, 2));
+        EOF
+        
+        # Run with and without our wrapper
+        echo "### Baseline (without wrapper):"
+        node benchmark.js > baseline.json
+        
+        echo "### With claude-yolt wrapper:"
+        node --require ./lib/process-interceptor.js benchmark.js > wrapped.json
+
+    - name: AI Performance Analysis
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Prepare performance analysis prompt
+        perf_prompt="Analyze the performance impact of our process interceptor:
+        
+        Baseline results:
+        $(cat baseline.json)
+        
+        With wrapper results:
+        $(cat wrapped.json)
+        
+        Code being analyzed:
+        $(head -100 lib/process-interceptor.js)
+        
+        Provide:
+        1. Performance overhead percentage
+        2. Bottleneck identification
+        3. Optimization suggestions
+        4. Memory usage concerns
+        5. Scalability analysis for 1000+ processes"
+        
+        # Get AI analysis
+        analysis=$(curl -X POST https://models.inference.ai.azure.com/chat/completions \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @- <<EOF | jq -r '.choices[0].message.content'
+        {
+          "model": "gpt-4o",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a performance engineer specializing in Node.js process management and optimization."
+            },
+            {
+              "role": "user",
+              "content": "$perf_prompt"
+            }
+          ],
+          "temperature": 0.2,
+          "max_tokens": 1000
+        }
+        EOF
+        )
+        
+        # Create performance report
+        echo "# Performance Analysis Report" > performance-report.md
+        echo "" >> performance-report.md
+        echo "**Date**: $(date)" >> performance-report.md
+        echo "**Commit**: ${{ github.sha }}" >> performance-report.md
+        echo "" >> performance-report.md
+        echo "## Benchmark Results" >> performance-report.md
+        echo "" >> performance-report.md
+        echo "### Baseline" >> performance-report.md
+        echo '```json' >> performance-report.md
+        cat baseline.json >> performance-report.md
+        echo '```' >> performance-report.md
+        echo "" >> performance-report.md
+        echo "### With Wrapper" >> performance-report.md
+        echo '```json' >> performance-report.md
+        cat wrapped.json >> performance-report.md
+        echo '```' >> performance-report.md
+        echo "" >> performance-report.md
+        echo "## AI Analysis" >> performance-report.md
+        echo "" >> performance-report.md
+        echo "$analysis" >> performance-report.md
+        
+        # Check if performance degraded significantly
+        baseline_time=$(jq -r '.avgTime' baseline.json)
+        wrapped_time=$(jq -r '.avgTime' wrapped.json)
+        overhead=$(echo "scale=2; (($wrapped_time - $baseline_time) / $baseline_time) * 100" | bc)
+        
+        if (( $(echo "$overhead > 50" | bc -l) )); then
+          # Create issue if significant performance regression
+          gh issue create --title "Performance Alert: ${overhead}% overhead detected" \
+            --body "$(cat performance-report.md)" \
+            --label "performance,urgent"
+        fi
+
+    - name: Memory Usage Analysis
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Analyze memory usage patterns
+        memory_prompt="Analyze memory usage patterns in this process management code:
+        
+        Focus on:
+        1. Memory leaks in Maps/Sets (activeProcesses, processQueue)
+        2. Stream buffer management
+        3. Event listener cleanup
+        4. Potential memory exhaustion with 1000+ processes
+        5. Google's Node.js memory best practices
+        
+        Code:
+        $(cat lib/process-interceptor.js lib/stream-handler.js | head -300)"
+        
+        # Get memory analysis
+        curl -X POST https://models.inference.ai.azure.com/chat/completions \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @- <<EOF | jq -r '.choices[0].message.content' > memory-analysis.md
+        {
+          "model": "gpt-4o",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a Google engineer expert in Node.js memory management and performance."
+            },
+            {
+              "role": "user",
+              "content": "$memory_prompt"
+            }
+          ],
+          "temperature": 0.1
+        }
+        EOF
+        
+        # Append to performance report
+        echo "" >> performance-report.md
+        echo "## Memory Usage Analysis" >> performance-report.md
+        echo "" >> performance-report.md
+        cat memory-analysis.md >> performance-report.md
+
+    - name: Upload Performance Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-analysis-${{ github.sha }}
+        path: performance-report.md

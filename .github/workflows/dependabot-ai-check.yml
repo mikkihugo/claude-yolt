@@ -1,0 +1,143 @@
+name: Dependabot AI Safety Check
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  ai-dependency-check:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Dependabot metadata
+      id: metadata
+      uses: dependabot/fetch-metadata@v2
+      with:
+        github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+    - name: AI Dependency Safety Check
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Get dependency info
+        dep_name="${{ steps.metadata.outputs.dependency-names }}"
+        old_version="${{ steps.metadata.outputs.previous-version }}"
+        new_version="${{ steps.metadata.outputs.new-version }}"
+        update_type="${{ steps.metadata.outputs.update-type }}"
+        
+        # Create safety check prompt
+        safety_prompt="Analyze this dependency update for safety:
+        
+        Package: $dep_name
+        Version: $old_version → $new_version
+        Update type: $update_type
+        
+        Check for:
+        1. Known vulnerabilities in the new version
+        2. Breaking changes that could affect process management
+        3. Security implications for a tool that bypasses permissions
+        4. Compatibility with Node.js process handling
+        
+        Context: This package (claude-yolt) intercepts and limits child processes."
+        
+        # Call GitHub Models for analysis
+        response=$(curl -X POST https://models.inference.ai.azure.com/chat/completions \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @- <<EOF
+        {
+          "model": "gpt-4o",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a security expert analyzing npm dependency updates."
+            },
+            {
+              "role": "user",
+              "content": "$safety_prompt"
+            }
+          ],
+          "temperature": 0.1,
+          "max_tokens": 800
+        }
+        EOF
+        )
+        
+        # Extract analysis
+        analysis=$(echo "$response" | jq -r '.choices[0].message.content')
+        
+        # Post analysis as PR comment
+        gh pr comment ${{ github.event.pull_request.number }} --body "## 🤖 AI Dependency Safety Analysis
+        
+        **Package**: \`$dep_name\`
+        **Update**: \`$old_version\` → \`$new_version\`
+        
+        $analysis
+        
+        ---
+        *Analysis powered by GitHub Models (GPT-4)*
+        
+        ⚠️ **Remember**: This tool bypasses security, so dependency updates need extra scrutiny."
+        
+        # Check if analysis contains warnings
+        if echo "$analysis" | grep -iE "(warning|danger|vulnerability|risk|breaking)" > /dev/null; then
+          echo "::warning::AI analysis found potential concerns with $dep_name update"
+          
+          # Add warning label
+          gh pr edit ${{ github.event.pull_request.number }} --add-label "needs-review"
+        else
+          # Add safe label
+          gh pr edit ${{ github.event.pull_request.number }} --add-label "ai-approved"
+        fi
+
+    - name: Check for Process-Related Changes
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Special check for packages that might affect process handling
+        if echo "${{ steps.metadata.outputs.dependency-names }}" | grep -iE "(child_process|spawn|exec|fork|cluster|worker)" > /dev/null; then
+          
+          process_prompt="This dependency update affects process handling. Analyze impact on:
+          
+          1. Process spawning behavior
+          2. Stream handling (stdout/stderr)
+          3. Process limits and queuing
+          4. Potential for process explosions
+          5. Compatibility with our process interception"
+          
+          # Get detailed analysis
+          curl -X POST https://models.inference.ai.azure.com/chat/completions \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF | jq -r '.choices[0].message.content' > process-impact.md
+          {
+            "model": "gpt-4o",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are an expert in Node.js process management and child process handling."
+              },
+              {
+                "role": "user",
+                "content": "$process_prompt\n\nPackage: ${{ steps.metadata.outputs.dependency-names }}\nUpdate: ${{ steps.metadata.outputs.previous-version }} → ${{ steps.metadata.outputs.new-version }}"
+              }
+            ],
+            "temperature": 0.2
+          }
+          EOF
+          
+          # Post additional comment for process-related updates
+          gh pr comment ${{ github.event.pull_request.number }} --body "## ⚠️ Process-Related Dependency Update
+          
+          This update affects process handling components. Additional analysis:
+          
+          $(cat process-impact.md)
+          
+          **Recommendation**: Test thoroughly with high process count scenarios before merging."
+        fi

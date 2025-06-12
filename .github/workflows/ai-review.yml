@@ -1,0 +1,200 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get changed files
+      id: changed-files
+      uses: tj-actions/changed-files@v44
+      with:
+        separator: ","
+
+    - name: AI Code Review with GitHub Models
+      if: steps.changed-files.outputs.any_changed == 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Use GitHub Models API for code review
+        changed_files="${{ steps.changed-files.outputs.all_changed_files }}"
+        
+        # Create review prompt
+        review_prompt="Review these code changes for:
+        1. Security vulnerabilities
+        2. Performance issues
+        3. Best practices
+        4. Potential bugs
+        
+        Changed files: $changed_files
+        
+        Context: This is claude-yolt, a wrapper that fixes Claude CLI's process explosion bug.
+        Focus on process management, security bypasses, and resource limits."
+        
+        # Call GitHub Models API (using their recommended endpoint)
+        response=$(curl -X POST https://models.inference.ai.azure.com/chat/completions \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @- <<EOF
+        {
+          "model": "gpt-4o",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are an expert code reviewer focusing on security and performance."
+            },
+            {
+              "role": "user", 
+              "content": "$review_prompt\n\n$(git diff HEAD~1)"
+            }
+          ],
+          "temperature": 0.3,
+          "max_tokens": 1000
+        }
+        EOF
+        )
+        
+        # Extract review from response
+        review=$(echo "$response" | jq -r '.choices[0].message.content')
+        
+        # Post review as comment
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          gh pr comment ${{ github.event.pull_request.number }} --body "## 🤖 AI Code Review
+          
+          $review
+          
+          ---
+          *Powered by GitHub Models*"
+        else
+          # For push events, create an issue if there are concerns
+          if echo "$review" | grep -iE "(security|vulnerability|risk|danger)" > /dev/null; then
+            gh issue create --title "AI Review: Potential issues in ${{ github.sha }}" \
+              --body "## 🤖 AI Code Review found potential issues
+              
+              **Commit**: ${{ github.sha }}
+              **Author**: ${{ github.actor }}
+              
+              $review
+              
+              ---
+              *Powered by GitHub Models*" \
+              --label "ai-review,security"
+          fi
+        fi
+
+    - name: Security Analysis with GitHub Models
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Analyze security implications
+        security_prompt="Analyze the security implications of this code that bypasses Claude's permission system:
+        
+        1. What are the risks?
+        2. What attack vectors exist?
+        3. How could this be misused?
+        4. What safeguards are in place?
+        
+        Remember this is an experimental tool meant to demonstrate bugs."
+        
+        # Get security analysis
+        curl -X POST https://models.inference.ai.azure.com/chat/completions \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @- <<EOF | jq -r '.choices[0].message.content' > security-report.md
+        {
+          "model": "gpt-4o-mini",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a security researcher analyzing experimental tools."
+            },
+            {
+              "role": "user",
+              "content": "$security_prompt\n\n$(cat lib/yolo.js lib/process-interceptor.js | head -500)"
+            }
+          ],
+          "temperature": 0.1
+        }
+        EOF
+        
+        # Upload security report as artifact
+        echo "# Security Analysis Report" > full-report.md
+        echo "**Date**: $(date)" >> full-report.md
+        echo "**Commit**: ${{ github.sha }}" >> full-report.md
+        echo "" >> full-report.md
+        cat security-report.md >> full-report.md
+        
+    - name: Upload Security Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-analysis
+        path: full-report.md
+
+  best-practices:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Google Best Practices Check
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Check against Google's Node.js best practices
+        practices_prompt="Review this Node.js code against Google's best practices:
+        
+        1. Error handling patterns
+        2. Async/await usage
+        3. Resource cleanup
+        4. Memory management
+        5. Process handling
+        
+        Focus on: process management, stream handling, resource limits"
+        
+        # Analyze main process interceptor
+        curl -X POST https://models.inference.ai.azure.com/chat/completions \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @- <<EOF | jq -r '.choices[0].message.content' > practices-report.md
+        {
+          "model": "gpt-4o",
+          "messages": [
+            {
+              "role": "system",
+              "content": "You are a Google engineer reviewing Node.js code for best practices."
+            },
+            {
+              "role": "user",
+              "content": "$practices_prompt\n\n$(cat lib/process-interceptor.js)"
+            }
+          ],
+          "temperature": 0.2
+        }
+        EOF
+        
+        # Create actionable recommendations
+        if grep -iE "(improve|fix|consider|should|must)" practices-report.md > /dev/null; then
+          echo "## 📋 Best Practices Review" > recommendations.md
+          echo "" >> recommendations.md
+          cat practices-report.md >> recommendations.md
+          
+          # Create issue if on main branch
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            gh issue create --title "Best Practices: Recommendations from AI review" \
+              --body "$(cat recommendations.md)" \
+              --label "enhancement,ai-review"
+          fi
+        fi

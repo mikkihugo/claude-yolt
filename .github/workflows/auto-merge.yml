@@ -22,9 +22,36 @@ jobs:
       with:
         github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+    - name: Wait for AI analysis
+      run: |
+        echo "Waiting for AI analysis to complete..."
+        sleep 30  # Give AI workflow time to run
+        
+        # Check if AI approved
+        labels=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '.labels[].name' | tr '\n' ' ')
+        
+        if echo "$labels" | grep -q "needs-review"; then
+          echo "::warning::AI analysis found concerns - manual review required"
+          exit 0  # Don't fail, just skip auto-merge
+        fi
+        
+        if echo "$labels" | grep -q "ai-approved"; then
+          echo "✅ AI analysis approved this update"
+        fi
+      env:
+        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
     - name: Auto-merge minor and patch updates
       if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
-      run: gh pr merge --auto --merge "$PR_URL"
+      run: |
+        # Only auto-merge if not flagged by AI
+        labels=$(gh pr view ${{ github.event.pull_request.number }} --json labels -q '.labels[].name' | tr '\n' ' ')
+        
+        if echo "$labels" | grep -q "needs-review"; then
+          echo "Skipping auto-merge due to AI concerns"
+        else
+          gh pr merge --auto --merge "$PR_URL"
+        fi
       env:
         PR_URL: ${{github.event.pull_request.html_url}}
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
