@@ -30,11 +30,15 @@ claude-yolt --model claude-3-opus-20240229
 
 ## What It Does
 
-- Limits concurrent processes to 200 (queues extras instead of failing)
-- Prevents pipe buffer deadlock by draining streams
-- Bypasses permission prompts (⚠️ security risk)
-- Forces single-threaded `fd` and `rg` searches
-- Kills hung processes (0% CPU for >10s)
+- **Process limiting**: Max 200 concurrent (queues extras, never fails)
+- **Stream handling**: Prevents pipe buffer deadlock by draining stdout/stderr
+- **Permission bypass**: No security prompts (⚠️ security risk)
+- **Search tools**: Forces `fd` and `rg` to single-threaded mode
+- **Cargo control**: Forces `--jobs 4` on all cargo commands
+- **Build tools**: Limits make/cmake/ninja parallelism via env vars
+- **Hang detection**: Kills processes with 0% CPU for >10s
+- **Nice level**: All processes run at lower priority
+- **Transparent**: Works exactly like claude, just slower
 
 ## Credits
 
