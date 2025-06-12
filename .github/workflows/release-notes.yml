@@ -1,0 +1,96 @@
+name: Generate Release Notes with claude-yolt
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  releases: write
+
+jobs:
+  generate-notes:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install claude-yolt
+      run: npm install -g .
+
+    - name: Configure Claude
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        mkdir -p ~/.config/@anthropic-ai/claude-code
+        echo "{\"apiKey\": \"$ANTHROPIC_API_KEY\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+
+    - name: Generate Release Notes
+      env:
+        CLAUDE_MAX_PROCESSES: "30"  # Conservative limit
+      run: |
+        # Get commits since last release
+        if [ "${{ github.event_name }}" == "release" ]; then
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          CURRENT_TAG="${{ github.event.release.tag_name }}"
+        else
+          # For manual trigger, use last two tags
+          CURRENT_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || echo "HEAD")
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        fi
+        
+        if [ -z "$PREV_TAG" ]; then
+          echo "No previous tag found, using last 20 commits"
+          COMMITS=$(git log --oneline -20)
+        else
+          echo "Generating notes from $PREV_TAG to $CURRENT_TAG"
+          COMMITS=$(git log --oneline $PREV_TAG..$CURRENT_TAG)
+        fi
+        
+        # Use claude-yolt to generate release notes
+        NOTES=$(claude-yolt "Generate release notes for claude-yolt version $CURRENT_TAG.
+        
+        Commits:
+        $COMMITS
+        
+        Please create:
+        1. A brief summary of what changed
+        2. Breaking changes (if any)
+        3. New features
+        4. Bug fixes
+        5. Security updates
+        6. A note that this tool bypasses security (include warning)
+        
+        Format as markdown suitable for GitHub releases.
+        Be concise but complete." 2>&1)
+        
+        # Save notes
+        echo "$NOTES" > release-notes.md
+        
+        # Update release if this is a release event
+        if [ "${{ github.event_name }}" == "release" ]; then
+          gh release edit "${{ github.event.release.tag_name }}" \
+            --notes-file release-notes.md
+        else
+          # Otherwise create a draft release
+          gh release create "v0.0.4-alpha" \
+            --draft \
+            --title "claude-yolt v0.0.4-alpha" \
+            --notes-file release-notes.md
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Release Notes
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-notes
+        path: release-notes.md

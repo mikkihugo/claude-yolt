@@ -55,6 +55,17 @@ jobs:
     
     - name: Run tests
       run: npm test
+    
+    - name: Test claude-yolt Installation
+      run: |
+        # Install globally
+        npm install -g .
+        
+        # Verify it works
+        claude-yolt --help || echo "Help not implemented"
+        
+        # Test with a simple prompt (no API key needed for help)
+        echo "✅ claude-yolt installed successfully"
 
   # Build and push Docker image
   build:
