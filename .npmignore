@@ -12,11 +12,23 @@ test/
 tests/
 docs/
 examples/
+*.md
+!README.md
+!CONTRIBUTING.md
 
 # Build files
-rust-process-manager/target/
-rust-process-manager/Cargo.lock
+rust/
+rust-process-manager/
+dist/
 *.rs
+*.toml
+!package.json
+
+# CI/CD
+.github/
+k8s/
+systemd/
+Dockerfile
 
 # IDE files
 .vscode/
@@ -30,3 +42,11 @@ Thumbs.db
 
 # Session files
 SESSION.md
+build.js
+benchmark-*.js
+test*.js
+
+# Misc
+.mise.toml
+example-*.md
+claude-cli-issue.md

@@ -1,6 +1,6 @@
 {
   "name": "claude-yolt",
-  "version": "1.0.0",
+  "version": "0.0.3-alpha",
   "description": "Unified Claude CLI wrapper: YOLO mode + safety limits + intelligent routing",
   "type": "module",
   "main": "index.js",
