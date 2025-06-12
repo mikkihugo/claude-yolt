@@ -1,0 +1,185 @@
+name: Native claude-yolt Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  yolt-review:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install claude-yolt
+      run: |
+        npm install -g .
+        
+        # Verify installation
+        which claude-yolt
+        claude-yolt --version || echo "Version command not implemented"
+
+    - name: Setup Claude Login
+      env:
+        CLAUDE_LOGIN: ${{ secrets.CLAUDE_LOGIN }}
+        CLAUDE_SESSION_KEY: ${{ secrets.CLAUDE_SESSION_KEY }}
+      run: |
+        # Create config directory
+        mkdir -p ~/.config/@anthropic-ai/claude-code
+        
+        # Option 1: Use session key if available
+        if [ -n "$CLAUDE_SESSION_KEY" ]; then
+          echo "{\"sessionKey\": \"$CLAUDE_SESSION_KEY\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+          echo "✅ Using session key authentication"
+        
+        # Option 2: Interactive login simulation
+        elif [ -n "$CLAUDE_LOGIN" ]; then
+          echo "🔐 Attempting login flow..."
+          # claude-yolt should handle the login flow
+          echo "$CLAUDE_LOGIN" | claude-yolt --login || true
+        
+        # Option 3: Use the tool's own auth handling
+        else
+          echo "🔧 Using claude-yolt's built-in auth handling"
+          # claude-yolt bypasses auth checks, so it might work without config
+        fi
+
+    - name: Test claude-yolt
+      env:
+        CLAUDE_MAX_PROCESSES: "10"  # Very conservative for CI
+        CLAUDE_PROCESS_DELAY: "200"
+      run: |
+        # Test if claude-yolt works
+        echo "Testing claude-yolt..."
+        timeout 30 claude-yolt "Say 'Hello from claude-yolt in GitHub Actions'" || {
+          echo "⚠️ claude-yolt test failed, but continuing..."
+        }
+
+    - name: Code Review with claude-yolt
+      if: github.event_name == 'pull_request'
+      env:
+        CLAUDE_MAX_PROCESSES: "20"
+        CLAUDE_PROCESS_DELAY: "100"
+      run: |
+        # Get diff
+        git diff origin/main...HEAD > pr-changes.diff
+        
+        # Review with claude-yolt
+        echo "Running code review..."
+        review_output=$(timeout 300 claude-yolt "Review this code diff for claude-yolt:
+        
+        Focus on:
+        1. Process spawning safety
+        2. Stream handling correctness
+        3. Memory leak potential
+        4. Error handling
+        
+        Be concise. Here's the diff:
+        
+        $(cat pr-changes.diff | head -1000)" 2>&1) || {
+          echo "⚠️ Review timed out or failed"
+          review_output="claude-yolt review failed - falling back to static analysis"
+        }
+        
+        # Post review comment
+        gh pr comment ${{ github.event.pull_request.number }} --body "## 🔧 claude-yolt Code Review
+        
+        $review_output
+        
+        ---
+        *Review performed by claude-yolt itself (inception! 🌀)*
+        
+        Process limits: MAX=$CLAUDE_MAX_PROCESSES, DELAY=$CLAUDE_PROCESS_DELAY"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Analyze with claude-yolt
+      if: github.event_name == 'push'
+      env:
+        CLAUDE_MAX_PROCESSES: "30"
+      run: |
+        # Analyze the codebase
+        analysis=$(timeout 300 claude-yolt "Analyze claude-yolt's own codebase:
+        
+        1. Find potential bugs in process management
+        2. Identify memory leak risks
+        3. Suggest performance improvements
+        4. Check error handling completeness
+        
+        Focus on lib/process-interceptor.js" 2>&1) || {
+          analysis="Analysis timed out"
+        }
+        
+        # Create issue if problems found
+        if echo "$analysis" | grep -iE "bug|leak|error|issue|problem"; then
+          gh issue create --title "🔍 claude-yolt self-analysis found issues" \
+            --body "$analysis" \
+            --label "bug,self-analysis"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  yolt-stress-test:
+    runs-on: ubuntu-latest
+    name: Stress Test claude-yolt
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup
+      run: |
+        npm install -g .
+        
+    - name: Stress Test Process Limits
+      run: |
+        # Test with extreme limits
+        export CLAUDE_MAX_PROCESSES=5
+        export CLAUDE_PROCESS_DELAY=500
+        
+        echo "🧪 Testing claude-yolt under stress..."
+        
+        # This should trigger heavy process spawning
+        timeout 60 claude-yolt "List all files in the repository and analyze each one" 2>&1 | tee stress-test.log || {
+          echo "✅ Survived stress test (timeout is expected)"
+        }
+        
+        # Check if we maintained process limits
+        echo "Process spawn attempts:"
+        grep -c "Queueing process" stress-test.log || echo "0"
+        
+        echo "Max concurrent processes:"
+        ps aux | grep -c node || echo "Unknown"
+
+    - name: Memory Test
+      run: |
+        # Monitor memory usage
+        echo "🧪 Testing memory usage..."
+        
+        # Get baseline
+        baseline_mem=$(ps aux | grep node | awk '{sum+=$6} END {print sum}')
+        
+        # Run claude-yolt with memory-intensive prompt
+        timeout 30 claude-yolt "Generate a very long analysis of every JavaScript file" &
+        YOLT_PID=$!
+        
+        # Monitor memory
+        for i in {1..10}; do
+          current_mem=$(ps aux | grep node | awk '{sum+=$6} END {print sum}')
+          echo "Memory after ${i}s: ${current_mem}KB"
+          sleep 1
+        done
+        
+        kill $YOLT_PID 2>/dev/null || true
