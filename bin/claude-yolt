@@ -19,6 +19,10 @@ EventEmitter.defaultMaxListeners = 50;
 // Main
 async function main() {
   try {
+    // Check for CI mode first
+    const args = process.argv.slice(2);
+    const isCI = args.includes('--ci') || process.env.CI || process.env.GITHUB_ACTIONS;
+    
     // Apply bug workarounds first
     await bugWorkarounds.autoFix();
     bugWorkarounds.startMonitoring();
@@ -83,10 +87,6 @@ async function main() {
       ...process.env,
       ...applyResourceLimits(limits)
     };
-    
-    // Check for CI mode
-    const args = process.argv.slice(2);
-    const isCI = args.includes('--ci') || process.env.CI || process.env.GITHUB_ACTIONS;
     
     // Remove --ci flag before passing to Claude
     const claudeArgs = args.filter(arg => arg !== '--ci');
