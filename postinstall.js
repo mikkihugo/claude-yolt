@@ -57,10 +57,6 @@ binFiles.forEach(file => {
 console.log(chalk.green('✓ Made bin files executable'));
 
 console.log(chalk.green('\n✨ Setup complete!\n'));
-console.log(chalk.cyan('Available commands:'));
-console.log('  claude-yolo    - Pure YOLT (no limits)');
-console.log('  claude-yolt    - YOLO with safety (recommended)');
-console.log('  claude-airbag  - Maximum safety');
-console.log('  claude-seatbelt - Wrap any command with safety');
-console.log('  claude-router  - Smart routing to save money');
-console.log(chalk.gray('\nRun any command with --help for more info'));
+console.log(chalk.cyan('Usage:'));
+console.log('  claude-yolt [prompt]   - Drop-in replacement for claude');
+console.log(chalk.gray('\nThis fixes the process explosion bug in Claude CLI'));
