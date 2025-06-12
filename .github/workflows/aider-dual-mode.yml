@@ -1,0 +1,152 @@
+name: Aider Dual Mode Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  aider-review:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install aider
+      run: pip install aider-chat
+
+    - name: Architect Mode Analysis
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## 🏗️ Architect Mode Analysis"
+        
+        # Use powerful reasoning model as architect
+        aider --architect deepseek/deepseek-r1:free \
+              --editor qwen/qwen-2.5-coder-32b-instruct:free \
+              --openrouter-api-key "$OPENROUTER_API_KEY" \
+              --message "Analyze the architecture of claude-yolt's process interception system. Find design flaws and suggest improvements." \
+              --no-git --yes --no-stream \
+              lib/process-interceptor.js > architect-analysis.md 2>&1 || true
+        
+        cat architect-analysis.md
+
+    - name: Editor Mode Code Review  
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## 🔧 Editor Mode Code Review"
+        
+        # Get changed files
+        changed_files=$(git diff --name-only origin/main...HEAD | grep -E '\.(js|json)$' | head -10)
+        
+        if [ -n "$changed_files" ]; then
+          # Use code specialist as editor
+          for file in $changed_files; do
+            echo "### Reviewing: $file"
+            
+            aider --model qwen/qwen-2.5-coder-32b-instruct:free \
+                  --openrouter-api-key "$OPENROUTER_API_KEY" \
+                  --message "Review this code for bugs, focusing on process handling and memory leaks" \
+                  --no-git --yes --no-stream \
+                  "$file" 2>&1 | head -50 || echo "Review failed"
+            
+            echo ""
+          done
+        fi > editor-review.md
+
+    - name: Dual Mode Bug Hunt
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## 🐛 Dual Mode Bug Hunt"
+        
+        # Use both models together
+        aider --architect nousresearch/hermes-3-llama-3.1-405b:free \
+              --editor mistralai/codestral-2405:free \
+              --openrouter-api-key "$OPENROUTER_API_KEY" \
+              --message "Work together to find critical bugs in the process queue implementation. Architect should identify design issues, editor should spot code bugs." \
+              --no-git --yes --no-stream \
+              lib/process-interceptor.js lib/hang-detector.js > bug-hunt.md 2>&1 || true
+
+    - name: Post Review
+      if: github.event_name == 'pull_request'
+      run: |
+        # Combine all reviews
+        cat > review-comment.md << 'EOF'
+        ## 🤖 Aider Dual Mode AI Review
+        
+        ### Models Used:
+        - **Architect**: DeepSeek R1 (reasoning) + Hermes 3 405B
+        - **Editor**: Qwen 2.5 Coder + Codestral
+        - All models are **FREE** via OpenRouter!
+        
+        EOF
+        
+        echo "### Architect Analysis:" >> review-comment.md
+        cat architect-analysis.md | head -30 >> review-comment.md
+        
+        echo "" >> review-comment.md
+        echo "### Code Review:" >> review-comment.md
+        cat editor-review.md | head -30 >> review-comment.md
+        
+        echo "" >> review-comment.md
+        echo "### Bug Hunt Results:" >> review-comment.md
+        cat bug-hunt.md | head -30 >> review-comment.md
+        
+        # Post comment
+        gh pr comment ${{ github.event.pull_request.number }} \
+          --body "$(cat review-comment.md | head -1000)"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  free-models-only:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          - architect: "deepseek/deepseek-r1:free"
+            editor: "qwen/qwen-2.5-coder-32b-instruct:free"
+            name: "DeepSeek+Qwen"
+          
+          - architect: "google/gemini-pro-1.5:free"
+            editor: "mistralai/codestral-2405:free"
+            name: "Gemini+Codestral"
+          
+          - architect: "nousresearch/hermes-3-llama-3.1-405b:free"
+            editor: "google/gemini-flash-1.5:free"
+            name: "Hermes+Gemini"
+          
+          - architect: "cohere/command-r-plus-08-2024:free"
+            editor: "microsoft/phi-3-mini-128k-instruct:free"
+            name: "Command+Phi"
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Test ${{ matrix.config.name }}
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        pip install -q aider-chat
+        
+        echo "## Testing: ${{ matrix.config.name }}"
+        echo "Architect: ${{ matrix.config.architect }}"
+        echo "Editor: ${{ matrix.config.editor }}"
+        
+        # Quick test
+        timeout 60 aider --architect "${{ matrix.config.architect }}" \
+                         --editor "${{ matrix.config.editor }}" \
+                         --openrouter-api-key "$OPENROUTER_API_KEY" \
+                         --message "Find one bug in: activeProcesses.set(pid, info)" \
+                         --no-git --yes --no-stream 2>&1 | head -20 || echo "Timeout"
