@@ -11,7 +11,9 @@ CLAUDE_PROCESS_DELAY = "100"
 [tasks.install]
 description = "Install all dependencies"
 run = """
-npm ci || npm install
+# Install Node.js dependencies first (without build scripts)
+npm ci --ignore-scripts || npm install --ignore-scripts
+# Install Python dependencies
 pip install -q aider-chat
 """
 
