@@ -1,0 +1,76 @@
+name: Test AI Keys
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-ai-keys.yml'
+
+jobs:
+  test-keys:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Test OpenRouter
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "🧪 Testing OpenRouter API..."
+        
+        response=$(curl -s -w "\nHTTP_CODE:%{http_code}" https://openrouter.ai/api/v1/chat/completions \
+          -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "model": "google/gemini-flash-1.5-8b",
+            "messages": [{"role": "user", "content": "Say OK if this works"}],
+            "max_tokens": 10
+          }')
+        
+        http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
+        
+        if [ "$http_code" = "200" ]; then
+          echo "✅ OpenRouter API key works!"
+          echo "$response" | head -n -1 | jq -r '.choices[0].message.content'
+        else
+          echo "❌ OpenRouter API error: $http_code"
+          echo "$response" | head -n -1
+        fi
+
+    - name: Test Google AI
+      env:
+        GOOGLE_AI_KEY: ${{ secrets.GOOGLE_AI_KEY }}
+      run: |
+        echo "🧪 Testing Google AI (Gemini)..."
+        
+        response=$(curl -s -w "\nHTTP_CODE:%{http_code}" \
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=$GOOGLE_AI_KEY" \
+          -H 'Content-Type: application/json' \
+          -d '{
+            "contents": [{"parts": [{"text": "Say OK if this works"}]}],
+            "generationConfig": {"maxOutputTokens": 10}
+          }')
+        
+        http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
+        
+        if [ "$http_code" = "200" ]; then
+          echo "✅ Google AI key works!"
+          echo "$response" | head -n -1 | jq -r '.candidates[0].content.parts[0].text'
+        else
+          echo "❌ Google AI error: $http_code"
+          echo "$response" | head -n -1
+        fi
+
+    - name: Cost Comparison
+      run: |
+        echo "## 💰 Model Costs (per 1K tokens)"
+        echo ""
+        echo "### Via OpenRouter:"
+        echo "- google/gemini-flash-1.5-8b: $0.000015"
+        echo "- meta-llama/llama-3.2-3b-instruct: $0.00006"
+        echo "- anthropic/claude-3.5-haiku: $0.001"
+        echo ""
+        echo "### Direct APIs:"
+        echo "- Google AI (Gemini Flash): Free tier available"
+        echo "- OpenAI GPT-4o-mini: $0.00015"
+        echo ""
+        echo "Recommended: Use Gemini Flash for code review (fast & cheap)"
