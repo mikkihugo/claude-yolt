@@ -30,141 +30,167 @@ jobs:
     - name: Setup
       run: |
         npm install -g .
-        mkdir -p ~/.config/@anthropic-ai/claude-code
-        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+        pip install -q aider-chat
 
     - name: Memory Leak Detection
       if: github.event.inputs.focus_area == 'memory-leaks' || github.event.inputs.focus_area == ''
       env:
-        CLAUDE_MAX_PROCESSES: "20"
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Hunt for memory leaks in claude-yolt:
-        
-        Analyze:
-        1. Maps/Sets that grow without cleanup
-        2. Event listeners not removed
-        3. Closures holding references
-        4. Circular references
-        5. Stream buffers not released
-        6. Process references kept after exit
-        
-        Check these files for leaks:
-        $(find lib -name '*.js' -exec grep -l "Map\\|Set\\|on\\|once" {} \;)
-        
-        For each potential leak:
-        - File and line number
-        - Why it's a leak
-        - Impact over time
-        - Fix suggestion" > bugs-memory.md 2>&1
+        if [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user",
+                "content": "Hunt for memory leaks in claude-yolt:\n\n1. Maps/Sets that grow without cleanup\n2. Event listeners not removed\n3. Closures holding references\n4. Circular references\n5. Stream buffers not released\n6. Process references kept after exit\n\nAnalyze lib/ directory for potential memory leaks. For each leak: file/line, why it leaks, impact, fix suggestion."
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2000
+            }' | jq -r '.choices[0].message.content' > bugs-memory.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model deepseek/deepseek-r1:free \
+                --openrouter-api-key "$OPENROUTER_API_KEY" \
+                --message "Hunt for memory leaks: Maps/Sets cleanup, event listeners, closures, streams" \
+                lib/ --no-git --yes > bugs-memory.md
+        else
+          echo "## Memory Leak Detection" > bugs-memory.md
+          echo "Analysis skipped - no API key available" >> bugs-memory.md
+        fi
 
     - name: Race Condition Detection
       if: github.event.inputs.focus_area == 'race-conditions' || github.event.inputs.focus_area == ''
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Hunt for race conditions in claude-yolt:
-        
-        Look for:
-        1. Shared state without locks
-        2. Async operations on same data
-        3. Process queue race conditions
-        4. Event ordering dependencies
-        5. File system race conditions
-        6. Map/Set concurrent modifications
-        
-        Analyze:
-        $(cat lib/process-interceptor.js lib/hang-detector.js | head -400)
-        
-        For each race condition:
-        - Scenario that triggers it
-        - Potential impact
-        - Fix using proper synchronization" > bugs-races.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model nousresearch/hermes-3-llama-3.1-405b:free \
+                --openrouter-api-key "$OPENROUTER_API_KEY" \
+                --message "Hunt for race conditions: shared state, async operations, process queue, concurrent Map/Set access" \
+                lib/process-interceptor.js lib/hang-detector.js --no-git --yes > bugs-races.md
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user",
+                "content": "Hunt for race conditions in claude-yolt process management: shared state without locks, async operations on same data, process queue races, event ordering dependencies."
+              }],
+              "temperature": 0.1,
+              "max_tokens": 1500
+            }' | jq -r '.choices[0].message.content' > bugs-races.md
+        else
+          echo "## Race Condition Detection" > bugs-races.md
+          echo "Analysis skipped - no API key available" >> bugs-races.md
+        fi
 
     - name: Error Handling Gaps
       if: github.event.inputs.focus_area == 'error-handling' || github.event.inputs.focus_area == ''
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Find error handling gaps in claude-yolt:
-        
-        Check for:
-        1. Uncaught promise rejections
-        2. Missing try-catch blocks
-        3. Error swallowing (catch without handling)
-        4. Missing error event handlers
-        5. Inadequate error messages
-        6. Missing validation
-        
-        Review all files for:
-        - spawn/exec without error handlers
-        - Promises without .catch
-        - Sync operations that can throw
-        - JSON.parse without try-catch
-        
-        Files to check:
-        $(ls lib/*.js)" > bugs-errors.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model qwen/qwen-2.5-coder-32b-instruct:free \
+                --openrouter-api-key "$OPENROUTER_API_KEY" \
+                --message "Find error handling gaps: uncaught promises, missing try-catch, error swallowing, missing validation" \
+                lib/ --no-git --yes > bugs-errors.md
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-mini", 
+              "messages": [{
+                "role": "user",
+                "content": "Find error handling gaps in claude-yolt: uncaught promise rejections, missing try-catch blocks, error swallowing, missing error event handlers, inadequate error messages."
+              }],
+              "temperature": 0.1,
+              "max_tokens": 1500
+            }' | jq -r '.choices[0].message.content' > bugs-errors.md
+        else
+          echo "## Error Handling Gaps" > bugs-errors.md
+          echo "Analysis skipped - no API key available" >> bugs-errors.md
+        fi
 
     - name: Edge Case Analysis
       if: github.event.inputs.focus_area == 'edge-cases' || github.event.inputs.focus_area == ''
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
-        claude-yolt "Find edge cases not handled in claude-yolt:
-        
-        Consider:
-        1. Empty inputs/arrays
-        2. Null/undefined values
-        3. Circular dependencies
-        4. Symbolic links
-        5. Unicode in filenames
-        6. Very long command lines
-        7. Process limit = 0 or negative
-        8. Extremely large stdout
-        9. Binary output
-        10. Non-UTF8 encoding
-        
-        For each edge case:
-        - Where it could occur
-        - Current behavior
-        - Potential crash/hang
-        - Suggested fix" > bugs-edges.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model deepseek/deepseek-r1:free \
+                --openrouter-api-key "$OPENROUTER_API_KEY" \
+                --message "Find edge cases: empty inputs, null/undefined, circular deps, unicode filenames, long commands, process limit=0, large stdout, binary output" \
+                lib/ --no-git --yes > bugs-edges.md
+        else
+          echo "## Edge Case Analysis" > bugs-edges.md
+          echo "Analysis skipped - no API key available" >> bugs-edges.md
+        fi
 
     - name: Performance Bottlenecks
       if: github.event.inputs.focus_area == 'performance' || github.event.inputs.focus_area == ''
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Find performance bottlenecks in claude-yolt:
-        
-        Look for:
-        1. O(n²) algorithms
-        2. Unnecessary loops
-        3. Blocking I/O in hot paths
-        4. Large string concatenations
-        5. Inefficient data structures
-        6. Repeated calculations
-        7. Missing caches
-        8. Synchronous file operations
-        
-        Analyze hot paths:
-        - Process spawn interception
-        - Queue management
-        - Stream handling
-        - Event emission
-        
-        Suggest optimizations with complexity analysis" > bugs-performance.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model nousresearch/hermes-3-llama-3.1-405b:free \
+                --openrouter-api-key "$OPENROUTER_API_KEY" \
+                --message "Find performance bottlenecks: O(n²) algorithms, blocking I/O, large string concat, inefficient data structures, missing caches" \
+                lib/ --no-git --yes > bugs-performance.md
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user", 
+                "content": "Find performance bottlenecks in claude-yolt: O(n²) algorithms, blocking I/O in hot paths, inefficient data structures, repeated calculations, missing caches."
+              }],
+              "temperature": 0.1,
+              "max_tokens": 1500
+            }' | jq -r '.choices[0].message.content' > bugs-performance.md
+        else
+          echo "## Performance Bottlenecks" > bugs-performance.md
+          echo "Analysis skipped - no API key available" >> bugs-performance.md
+        fi
 
     - name: Security Vulnerabilities
       if: github.event.inputs.focus_area == 'security' || github.event.inputs.focus_area == ''
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Find security issues beyond the intentional bypass:
-        
-        Look for:
-        1. Command injection in spawn calls
-        2. Path traversal vulnerabilities  
-        3. Prototype pollution
-        4. RegEx DoS
-        5. Unvalidated input
-        6. Insecure randomness
-        7. Time-of-check-time-of-use
-        8. Resource exhaustion vectors
-        
-        Remember: permission bypass is intentional
-        Focus on: additional vulnerabilities
-        
-        Check spawn/exec calls particularly carefully" > bugs-security.md 2>&1
+        if [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user",
+                "content": "Find security issues beyond intentional bypass in claude-yolt: command injection in spawn calls, path traversal, prototype pollution, RegEx DoS, unvalidated input, resource exhaustion vectors."
+              }],
+              "temperature": 0.1,
+              "max_tokens": 1500
+            }' | jq -r '.choices[0].message.content' > bugs-security.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model deepseek/deepseek-r1:free \
+                --openrouter-api-key "$OPENROUTER_API_KEY" \
+                --message "Find security vulnerabilities: command injection, path traversal, prototype pollution, input validation issues" \
+                lib/ --no-git --yes > bugs-security.md
+        else
+          echo "## Security Vulnerabilities" > bugs-security.md
+          echo "Analysis skipped - no API key available" >> bugs-security.md
+        fi
 
     - name: Compile Bug Report
       run: |
@@ -185,6 +211,37 @@ jobs:
         # Count issues found
         ISSUE_COUNT=$(grep -c "File and line\|Where it could occur\|Scenario that triggers" bug-report.md || echo "0")
         echo "Total potential issues found: $ISSUE_COUNT" >> bug-report.md
+
+    - name: Grok-3 Creative Bug Analysis
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "" >> bug-report.md
+        echo "## 🚀 Grok-3 Creative Bug Analysis" >> bug-report.md
+        
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Try Grok-3 for creative and unconventional bug detection
+          curl -s "https://openrouter.ai/api/v1/chat/completions" \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "x-ai/grok-beta",
+              "messages": [{
+                "role": "user",
+                "content": "As Grok, analyze claude-yolt for weird, creative, and unconventional bugs that other models might miss:\n\n1. **Timing-dependent bugs**: Race conditions in unusual scenarios\n2. **Platform-specific issues**: OS-dependent edge cases\n3. **Process archaeology**: Zombie processes, orphans, handle leaks\n4. **Chaos engineering**: What happens under extreme load/failures?\n5. **Human factors**: UX bugs, confusing behaviors, foot-guns\n6. **Emergent behaviors**: Unexpected interactions between components\n\nBe creative and think outside the box. What could go hilariously wrong?"
+              }],
+              "temperature": 0.7,
+              "max_tokens": 1500
+            }' | jq -r '.choices[0].message.content' >> bug-report.md 2>/dev/null || {
+              echo "Grok-3 not available, using creative analysis fallback..." >> bug-report.md
+              aider --model mistralai/mistral-large-2411:free \
+                    --openrouter-api-key "$OPENROUTER_API_KEY" \
+                    --message "Think creatively about unusual bugs: timing issues, platform-specific problems, chaos scenarios, UX problems, emergent behaviors" \
+                    --no-git --yes >> bug-report.md
+            }
+        else
+          echo "Creative analysis skipped - no API key available" >> bug-report.md
+        fi
 
     - name: Create Bug Issues
       run: |
