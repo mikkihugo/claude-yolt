@@ -19,6 +19,12 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Setup mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+
     - name: Review with OpenRouter
       if: github.event_name == 'pull_request'
       env:

@@ -108,7 +108,6 @@ jobs:
           for file in $FILES; do
             filename=$(basename $file .js)
             aider --model google/gemini-pro-1.5:free \
-                  --openrouter-api-key "$OPENROUTER_API_KEY" \
                   --message "Generate comprehensive API documentation: module overview, functions, examples, integration guide" \
                   "$file" --no-git --yes > "docs/api-${filename}.md"
           done
@@ -128,7 +127,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model google/gemini-pro-1.5:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Create Mermaid diagrams for claude-yolt: component relationships, process flow, event flow, data flow. Show main entry, process interceptor, stream handler, hang detector, queue system interactions" \
                 lib/ --no-git --yes > docs/architecture-diagrams.md
         elif [ -n "$GITHUB_TOKEN" ]; then
@@ -169,7 +167,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' > docs/integration-guide.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model mistralai/mistral-large-2411:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Create integration guide: installation, configuration, use cases, troubleshooting, performance tuning" \
                 package.json README.md --no-git --yes > docs/integration-guide.md
         else
@@ -184,7 +181,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model cohere/command-r-plus-08-2024:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Generate FAQ for claude-yolt: why processes hang, how interceptor works, safety, process limits, debugging, performance, compatibility" \
                 README.md lib/ --no-git --yes > docs/FAQ.md
         elif [ -n "$GITHUB_TOKEN" ]; then
@@ -290,7 +286,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' > readme-suggestions.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model google/gemini-pro-1.5:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Suggest README improvements: missing sections, clarity, examples, visuals, SEO, user journey. Keep security warnings" \
                 README.md --no-git --yes > readme-suggestions.md
         else

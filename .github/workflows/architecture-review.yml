@@ -128,7 +128,6 @@ jobs:
         # Use aider for dependency analysis (fallback to free models)
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Analyze package.json dependencies for security risks, unused deps, and better alternatives" \
                 package.json --no-git --yes >> architecture-report.md
         else
@@ -143,7 +142,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model nousresearch/hermes-3-llama-3.1-405b:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Analyze performance architecture: bottlenecks, memory leaks, stream efficiency, event patterns" \
                 lib/process-interceptor.js --no-git --yes >> architecture-report.md
         else
@@ -205,7 +203,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model qwen/qwen-2.5-coder-32b-instruct:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Detect code smells in claude-yolt:
         
         1. Long methods (>50 lines)
@@ -233,7 +230,6 @@ jobs:
           COMPLEX_FILE=$(find lib -name '*.js' -exec wc -l {} \; | sort -rn | head -1 | awk '{print $2}')
           
           aider --model mistralai/codestral-2405:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Suggest refactoring: extract methods, reduce complexity, improve readability, add JSDoc" \
                 "$COMPLEX_FILE" --no-git --yes >> code-quality.md
         else
@@ -247,7 +243,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Analyze test coverage needs: missing test cases, edge cases, integration tests, performance tests" \
                 test.js lib/ --no-git --yes >> code-quality.md
         else
@@ -340,7 +335,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' > security-architecture.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Security review: permission bypass, injection risks, attack vectors" \
                 lib/ --no-git --yes > security-architecture.md
         else
@@ -354,7 +348,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model nousresearch/hermes-3-llama-3.1-405b:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Create threat model: malicious users, compromised deps, API attacks, process limits" \
                 lib/ --no-git --yes >> security-architecture.md
         else

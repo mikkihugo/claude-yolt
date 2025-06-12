@@ -17,6 +17,12 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Setup mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
@@ -34,7 +40,6 @@ jobs:
         # Use powerful reasoning model as architect
         aider --architect deepseek/deepseek-r1:free \
               --editor qwen/qwen-2.5-coder-32b-instruct:free \
-              --openrouter-api-key "$OPENROUTER_API_KEY" \
               --message "Analyze the architecture of claude-yolt's process interception system. Find design flaws and suggest improvements." \
               --no-git --yes --no-stream \
               lib/process-interceptor.js > architect-analysis.md 2>&1 || true
@@ -56,8 +61,7 @@ jobs:
             echo "### Reviewing: $file"
             
             aider --model qwen/qwen-2.5-coder-32b-instruct:free \
-                  --openrouter-api-key "$OPENROUTER_API_KEY" \
-                  --message "Review this code for bugs, focusing on process handling and memory leaks" \
+                      --message "Review this code for bugs, focusing on process handling and memory leaks" \
                   --no-git --yes --no-stream \
                   "$file" 2>&1 | head -50 || echo "Review failed"
             
@@ -74,7 +78,6 @@ jobs:
         # Use both models together
         aider --architect nousresearch/hermes-3-llama-3.1-405b:free \
               --editor mistralai/codestral-2405:free \
-              --openrouter-api-key "$OPENROUTER_API_KEY" \
               --message "Work together to find critical bugs in the process queue implementation. Architect should identify design issues, editor should spot code bugs." \
               --no-git --yes --no-stream \
               lib/process-interceptor.js lib/hang-detector.js > bug-hunt.md 2>&1 || true
@@ -147,6 +150,5 @@ jobs:
         # Quick test
         timeout 60 aider --architect "${{ matrix.config.architect }}" \
                          --editor "${{ matrix.config.editor }}" \
-                         --openrouter-api-key "$OPENROUTER_API_KEY" \
-                         --message "Find one bug in: activeProcesses.set(pid, info)" \
+                                    --message "Find one bug in: activeProcesses.set(pid, info)" \
                          --no-git --yes --no-stream 2>&1 | head -20 || echo "Timeout"

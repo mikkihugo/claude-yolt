@@ -87,7 +87,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' > optimization-report.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model nousresearch/hermes-3-llama-3.1-405b:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Analyze performance optimization opportunities: process queue, stream handling, event emitters, Map/Set ops, async patterns. Include specific code optimizations and O notation analysis" \
                 lib/process-interceptor.js --no-git --yes > optimization-report.md
         else
@@ -102,7 +101,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model qwen/qwen-2.5-coder-32b-instruct:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Implement the most impactful optimization from the analysis. Generate optimized version, benchmark to prove improvement, unit test for optimization" \
                 lib/process-interceptor.js --no-git --yes > optimized-code.js
         elif [ -n "$GITHUB_TOKEN" ]; then
@@ -130,7 +128,6 @@ jobs:
       run: |
         if [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model deepseek/deepseek-r1:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Optimize memory usage: Maps->WeakMaps, Arrays->Sets, string concat->buffers, avoid object cloning, reduce closures" \
                 lib/ --no-git --yes >> optimization-report.md
         elif [ -n "$GITHUB_TOKEN" ]; then
@@ -171,7 +168,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' >> optimization-report.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model nousresearch/hermes-3-llama-3.1-405b:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Find algorithm improvements: linear->O(1) searches, flatten nested loops, memoization, efficient queues. Focus on trySpawnNext(), stream handling, cleanup. Include Big O analysis" \
                 lib/process-interceptor.js --no-git --yes >> optimization-report.md
         else
@@ -279,7 +275,6 @@ jobs:
             }' | jq -r '.choices[0].message.content' > benchmark-report.md
         elif [ -n "$OPENROUTER_API_KEY" ]; then
           aider --model cohere/command-r-plus-08-2024:free \
-                --openrouter-api-key "$OPENROUTER_API_KEY" \
                 --message "Create benchmark comparison report: performance table, overhead percentages, recommendations, optimal settings" \
                 --no-git --yes < performance-baseline.txt > benchmark-report.md
         else
