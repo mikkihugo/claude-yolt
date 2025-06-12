@@ -49,7 +49,6 @@ fs.writeFileSync('dist/package.json', JSON.stringify(prodPkg, null, 2));
 const filesToCopy = [
   'README.md',
   'LICENSE',
-  'SESSION.md',
   'CLAUDE_PROCESS_SAFETY.md',
   '.npmignore'
 ];
