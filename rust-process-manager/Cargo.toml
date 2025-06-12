@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 sysinfo = "0.35"
-nix = { version = "0.27", features = ["process", "signal"] }
+nix = { version = "0.30", features = ["process", "signal"] }
 libc = "0.2"
 crossbeam = "0.8"
 dashmap = "5.5"
