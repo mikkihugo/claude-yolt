@@ -1,0 +1,256 @@
+name: Architecture & Design Review
+
+on:
+  pull_request:
+    types: [opened, reopened]
+    paths:
+      - 'lib/**'
+      - 'bin/**'
+      - 'package.json'
+  schedule:
+    - cron: '0 0 1 * *'  # Monthly architecture review
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  architecture-review:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Environment
+      run: |
+        npm install -g .
+        mkdir -p ~/.config/@anthropic-ai/claude-code
+        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+
+    - name: Architecture Analysis
+      env:
+        CLAUDE_MAX_PROCESSES: "30"
+      run: |
+        # Generate architecture overview
+        claude-yolt "Analyze the architecture of claude-yolt:
+        
+        1. Component relationships and dependencies
+        2. Design patterns used
+        3. Potential architectural improvements
+        4. Security architecture review
+        5. Scalability concerns
+        6. Code coupling and cohesion
+        
+        Focus on:
+        - Process interception design
+        - Stream handling architecture
+        - Queue management patterns
+        - Error handling strategies
+        
+        Be specific about file locations and line numbers." > architecture-report.md 2>&1
+
+    - name: Design Patterns Review
+      run: |
+        claude-yolt "Review design patterns in claude-yolt:
+        
+        1. Identify current patterns (Observer, Factory, Singleton, etc.)
+        2. Suggest missing patterns that could improve the code
+        3. Anti-patterns to refactor
+        4. SOLID principles compliance
+        5. DRY violations
+        
+        Review files:
+        $(find lib -name '*.js' | head -10)" >> architecture-report.md 2>&1
+
+    - name: Dependency Analysis
+      run: |
+        # Analyze dependencies
+        claude-yolt "Analyze claude-yolt's dependencies:
+        
+        Package.json:
+        $(cat package.json)
+        
+        Check for:
+        1. Unused dependencies
+        2. Security risks in dependencies
+        3. Better alternatives
+        4. Version pinning strategy
+        5. Circular dependencies in code
+        
+        Internal module dependencies:
+        $(find lib -name '*.js' -exec grep -l "require\\|import" {} \; | head -20)" >> architecture-report.md 2>&1
+
+    - name: Performance Architecture
+      run: |
+        claude-yolt "Analyze performance architecture:
+        
+        1. Bottlenecks in process queue design
+        2. Memory leak potential in Maps/Sets
+        3. Stream handling efficiency
+        4. Event emitter patterns
+        5. Async/await vs callbacks usage
+        
+        Focus on:
+        $(cat lib/process-interceptor.js | head -200)" >> architecture-report.md 2>&1
+
+    - name: Create Architecture Issue
+      if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      run: |
+        gh issue create --title "Monthly Architecture Review - $(date +%B)" \
+          --body "$(cat architecture-report.md)" \
+          --label "architecture,enhancement"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      run: |
+        gh pr comment ${{ github.event.pull_request.number }} \
+          --body "## 🏗️ Architecture Review
+          
+          $(cat architecture-report.md | head -1000)
+          
+          ---
+          *Full report attached as artifact*"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: architecture-review-${{ github.sha }}
+        path: architecture-report.md
+
+  code-quality-review:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup
+      run: |
+        npm install -g .
+        mkdir -p ~/.config/@anthropic-ai/claude-code
+        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+
+    - name: Code Smell Detection
+      env:
+        CLAUDE_MAX_PROCESSES: "20"
+      run: |
+        claude-yolt "Detect code smells in claude-yolt:
+        
+        1. Long methods (>50 lines)
+        2. Deep nesting (>3 levels)
+        3. Magic numbers and strings
+        4. Duplicate code blocks
+        5. Complex conditionals
+        6. Poor naming conventions
+        7. Missing error handling
+        8. Console.log left in code
+        
+        Scan all JS files and report specific locations:" > code-quality.md 2>&1
+
+    - name: Refactoring Suggestions
+      run: |
+        # Get most complex file
+        COMPLEX_FILE=$(find lib -name '*.js' -exec wc -l {} \; | sort -rn | head -1 | awk '{print $2}')
+        
+        claude-yolt "Suggest refactoring for $COMPLEX_FILE:
+        
+        1. Extract methods
+        2. Reduce complexity
+        3. Improve readability
+        4. Add missing JSDoc
+        5. Improve error messages
+        
+        Provide specific code examples" >> code-quality.md 2>&1
+
+    - name: Test Coverage Analysis
+      run: |
+        claude-yolt "Analyze test coverage needs:
+        
+        Current test file:
+        $(cat test.js 2>/dev/null || echo 'No tests found')
+        
+        Suggest:
+        1. Missing test cases
+        2. Edge cases to cover
+        3. Integration test scenarios
+        4. Performance test cases
+        5. Error handling tests
+        
+        For critical components:
+        - Process interceptor
+        - Stream handler
+        - Hang detector" >> code-quality.md 2>&1
+
+    - name: Create Quality Report
+      if: github.event_name == 'schedule'
+      run: |
+        gh issue create --title "Code Quality Report - $(date +%Y-%m-%d)" \
+          --body "$(cat code-quality.md)" \
+          --label "code-quality,technical-debt"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security-architecture:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup
+      run: |
+        npm install -g .
+        mkdir -p ~/.config/@anthropic-ai/claude-code
+        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+
+    - name: Security Architecture Review
+      env:
+        CLAUDE_MAX_PROCESSES: "20"
+      run: |
+        claude-yolt "Comprehensive security review of claude-yolt:
+        
+        1. Permission bypass implications
+        2. Process injection risks
+        3. Command injection vulnerabilities
+        4. Path traversal risks
+        5. Resource exhaustion attacks
+        6. Privilege escalation paths
+        7. Supply chain risks
+        
+        Review:
+        $(find . -name '*.js' -exec grep -l "spawn\\|exec\\|eval" {} \;)
+        
+        This tool bypasses security by design - focus on:
+        - Unintended escalations
+        - Additional attack vectors
+        - Mitigation strategies" > security-architecture.md 2>&1
+
+    - name: Threat Modeling
+      run: |
+        claude-yolt "Create threat model for claude-yolt:
+        
+        1. Actor: Malicious user with claude-yolt installed
+        2. Actor: Compromised dependency
+        3. Actor: Malicious Claude API responses
+        4. Actor: System attacker via process limits
+        
+        For each threat:
+        - Attack vector
+        - Impact
+        - Likelihood
+        - Mitigation
+        
+        Remember this tool already bypasses permissions" >> security-architecture.md 2>&1
+
+    - name: Create Security Report
+      if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)
+      run: |
+        gh issue create --title "Security Architecture Review - $(date +%Y-%m)" \
+          --body "$(cat security-architecture.md)" \
+          --label "security,architecture" \
+          --assignee "${{ github.repository_owner }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

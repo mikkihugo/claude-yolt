@@ -1,0 +1,211 @@
+name: Bug Hunter
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly bug hunt
+  workflow_dispatch:
+    inputs:
+      focus_area:
+        description: 'Area to focus on'
+        required: false
+        type: choice
+        options:
+          - memory-leaks
+          - race-conditions
+          - error-handling
+          - edge-cases
+          - performance
+          - security
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  hunt-bugs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup
+      run: |
+        npm install -g .
+        mkdir -p ~/.config/@anthropic-ai/claude-code
+        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+
+    - name: Memory Leak Detection
+      if: github.event.inputs.focus_area == 'memory-leaks' || github.event.inputs.focus_area == ''
+      env:
+        CLAUDE_MAX_PROCESSES: "20"
+      run: |
+        claude-yolt "Hunt for memory leaks in claude-yolt:
+        
+        Analyze:
+        1. Maps/Sets that grow without cleanup
+        2. Event listeners not removed
+        3. Closures holding references
+        4. Circular references
+        5. Stream buffers not released
+        6. Process references kept after exit
+        
+        Check these files for leaks:
+        $(find lib -name '*.js' -exec grep -l "Map\\|Set\\|on\\|once" {} \;)
+        
+        For each potential leak:
+        - File and line number
+        - Why it's a leak
+        - Impact over time
+        - Fix suggestion" > bugs-memory.md 2>&1
+
+    - name: Race Condition Detection
+      if: github.event.inputs.focus_area == 'race-conditions' || github.event.inputs.focus_area == ''
+      run: |
+        claude-yolt "Hunt for race conditions in claude-yolt:
+        
+        Look for:
+        1. Shared state without locks
+        2. Async operations on same data
+        3. Process queue race conditions
+        4. Event ordering dependencies
+        5. File system race conditions
+        6. Map/Set concurrent modifications
+        
+        Analyze:
+        $(cat lib/process-interceptor.js lib/hang-detector.js | head -400)
+        
+        For each race condition:
+        - Scenario that triggers it
+        - Potential impact
+        - Fix using proper synchronization" > bugs-races.md 2>&1
+
+    - name: Error Handling Gaps
+      if: github.event.inputs.focus_area == 'error-handling' || github.event.inputs.focus_area == ''
+      run: |
+        claude-yolt "Find error handling gaps in claude-yolt:
+        
+        Check for:
+        1. Uncaught promise rejections
+        2. Missing try-catch blocks
+        3. Error swallowing (catch without handling)
+        4. Missing error event handlers
+        5. Inadequate error messages
+        6. Missing validation
+        
+        Review all files for:
+        - spawn/exec without error handlers
+        - Promises without .catch
+        - Sync operations that can throw
+        - JSON.parse without try-catch
+        
+        Files to check:
+        $(ls lib/*.js)" > bugs-errors.md 2>&1
+
+    - name: Edge Case Analysis
+      if: github.event.inputs.focus_area == 'edge-cases' || github.event.inputs.focus_area == ''
+      run: |
+        claude-yolt "Find edge cases not handled in claude-yolt:
+        
+        Consider:
+        1. Empty inputs/arrays
+        2. Null/undefined values
+        3. Circular dependencies
+        4. Symbolic links
+        5. Unicode in filenames
+        6. Very long command lines
+        7. Process limit = 0 or negative
+        8. Extremely large stdout
+        9. Binary output
+        10. Non-UTF8 encoding
+        
+        For each edge case:
+        - Where it could occur
+        - Current behavior
+        - Potential crash/hang
+        - Suggested fix" > bugs-edges.md 2>&1
+
+    - name: Performance Bottlenecks
+      if: github.event.inputs.focus_area == 'performance' || github.event.inputs.focus_area == ''
+      run: |
+        claude-yolt "Find performance bottlenecks in claude-yolt:
+        
+        Look for:
+        1. O(n²) algorithms
+        2. Unnecessary loops
+        3. Blocking I/O in hot paths
+        4. Large string concatenations
+        5. Inefficient data structures
+        6. Repeated calculations
+        7. Missing caches
+        8. Synchronous file operations
+        
+        Analyze hot paths:
+        - Process spawn interception
+        - Queue management
+        - Stream handling
+        - Event emission
+        
+        Suggest optimizations with complexity analysis" > bugs-performance.md 2>&1
+
+    - name: Security Vulnerabilities
+      if: github.event.inputs.focus_area == 'security' || github.event.inputs.focus_area == ''
+      run: |
+        claude-yolt "Find security issues beyond the intentional bypass:
+        
+        Look for:
+        1. Command injection in spawn calls
+        2. Path traversal vulnerabilities  
+        3. Prototype pollution
+        4. RegEx DoS
+        5. Unvalidated input
+        6. Insecure randomness
+        7. Time-of-check-time-of-use
+        8. Resource exhaustion vectors
+        
+        Remember: permission bypass is intentional
+        Focus on: additional vulnerabilities
+        
+        Check spawn/exec calls particularly carefully" > bugs-security.md 2>&1
+
+    - name: Compile Bug Report
+      run: |
+        echo "# 🐛 Bug Hunt Report - $(date +%Y-%m-%d)" > bug-report.md
+        echo "" >> bug-report.md
+        echo "Focus area: ${{ github.event.inputs.focus_area || 'all' }}" >> bug-report.md
+        echo "" >> bug-report.md
+        
+        # Add all findings
+        for report in bugs-*.md; do
+          if [ -f "$report" ]; then
+            echo "## ${report#bugs-}" >> bug-report.md
+            cat "$report" >> bug-report.md
+            echo "" >> bug-report.md
+          fi
+        done
+        
+        # Count issues found
+        ISSUE_COUNT=$(grep -c "File and line\|Where it could occur\|Scenario that triggers" bug-report.md || echo "0")
+        echo "Total potential issues found: $ISSUE_COUNT" >> bug-report.md
+
+    - name: Create Bug Issues
+      run: |
+        # Create individual issues for critical bugs
+        if grep -q "Command injection\|Memory leak\|Race condition" bug-report.md; then
+          gh issue create --title "🐛 Bug Hunt: Critical issues found" \
+            --body "$(cat bug-report.md)" \
+            --label "bug,security,urgent" \
+            --assignee "${{ github.repository_owner }}"
+        else
+          gh issue create --title "🐛 Bug Hunt Report - $(date +%B %d)" \
+            --body "$(cat bug-report.md)" \
+            --label "bug,enhancement"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Bug Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: bug-hunt-${{ github.run_id }}
+        path: |
+          bug-report.md
+          bugs-*.md

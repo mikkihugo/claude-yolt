@@ -1,0 +1,220 @@
+name: Performance Optimization
+
+on:
+  schedule:
+    - cron: '0 0 15 * *'  # Monthly on the 15th
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup
+      run: |
+        npm install -g .
+        mkdir -p ~/.config/@anthropic-ai/claude-code
+        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+
+    - name: Profile Current Performance
+      run: |
+        # Create performance test
+        cat > perf-test.js << 'EOF'
+        import { spawn } from 'child_process';
+        import { performance } from 'perf_hooks';
+        
+        const scenarios = [
+          { name: 'spawn-burst', count: 100, cmd: ['echo', 'test'] },
+          { name: 'fd-search', count: 10, cmd: ['fd', '.js', '-t', 'f'] },
+          { name: 'grep-heavy', count: 20, cmd: ['grep', '-r', 'TODO', '.'] }
+        ];
+        
+        for (const scenario of scenarios) {
+          const start = performance.now();
+          const promises = [];
+          
+          for (let i = 0; i < scenario.count; i++) {
+            promises.push(new Promise((resolve) => {
+              const proc = spawn(scenario.cmd[0], scenario.cmd.slice(1));
+              proc.on('close', resolve);
+            }));
+          }
+          
+          await Promise.all(promises);
+          const time = performance.now() - start;
+          console.log(`${scenario.name}: ${time.toFixed(2)}ms (${(time/scenario.count).toFixed(2)}ms avg)`);
+        }
+        EOF
+        
+        echo "### Baseline Performance:" > performance-baseline.txt
+        timeout 60 node perf-test.js >> performance-baseline.txt 2>&1
+        
+        echo "### With claude-yolt:" >> performance-baseline.txt
+        timeout 60 node --require ./lib/process-interceptor.js perf-test.js >> performance-baseline.txt 2>&1
+
+    - name: Optimization Analysis
+      env:
+        CLAUDE_MAX_PROCESSES: "30"
+      run: |
+        claude-yolt "Analyze performance optimization opportunities in claude-yolt:
+        
+        Current performance:
+        $(cat performance-baseline.txt)
+        
+        Analyze these components for optimization:
+        1. Process queue implementation
+        2. Stream handling efficiency
+        3. Event emitter usage
+        4. Map/Set operations
+        5. String operations
+        6. Async/await patterns
+        
+        Code to optimize:
+        $(cat lib/process-interceptor.js | head -300)
+        
+        Provide:
+        - Specific optimizations with code
+        - Expected performance gain
+        - Complexity improvement (O notation)
+        - Memory usage reduction" > optimization-report.md 2>&1
+
+    - name: Generate Optimized Code
+      run: |
+        # Pick the most impactful optimization
+        claude-yolt "Implement the most impactful optimization from the analysis:
+        
+        Previous analysis:
+        $(cat optimization-report.md | head -200)
+        
+        Generate:
+        1. Optimized version of the specific function/component
+        2. Benchmark to prove improvement
+        3. Unit test for the optimization
+        
+        Output the complete optimized code" > optimized-code.js 2>&1
+
+    - name: Memory Optimization
+      run: |
+        claude-yolt "Optimize memory usage in claude-yolt:
+        
+        Current issues:
+        1. Maps that could be WeakMaps
+        2. Arrays that could be Sets
+        3. String concatenation vs buffers
+        4. Unnecessary object cloning
+        5. Large closures
+        
+        Analyze:
+        $(find lib -name '*.js' -exec grep -l "new Map\\|new Set\\|concat\\|push" {} \;)
+        
+        Suggest memory-efficient alternatives" >> optimization-report.md 2>&1
+
+    - name: Algorithm Optimization
+      run: |
+        claude-yolt "Find algorithm improvements in claude-yolt:
+        
+        Look for:
+        1. Linear searches that could be O(1) with Map
+        2. Nested loops that could be flattened
+        3. Repeated calculations without memoization
+        4. Inefficient queue operations
+        5. Suboptimal data structures
+        
+        Focus on hot paths:
+        - trySpawnNext() in process queue
+        - Stream data handling
+        - Process cleanup loops
+        
+        Provide Big O analysis for current vs optimized" >> optimization-report.md 2>&1
+
+    - name: Create Optimization PR
+      run: |
+        # Check if we have valid optimizations
+        if ! grep -q "Expected performance gain\|O(" optimization-report.md; then
+          echo "No clear optimizations found"
+          exit 0
+        fi
+        
+        # Create optimization branch
+        BRANCH="perf/optimize-$(date +%Y%m%d)"
+        git checkout -b $BRANCH
+        
+        # If we have optimized code, add it
+        if [ -f optimized-code.js ] && [ -s optimized-code.js ]; then
+          # This is a demo - in reality we'd integrate the optimized code properly
+          cp optimized-code.js lib/optimized-code.js.example
+          git add lib/optimized-code.js.example
+        fi
+        
+        # Add optimization report
+        mkdir -p docs/performance
+        cp optimization-report.md docs/performance/
+        git add docs/performance/optimization-report.md
+        
+        # Commit and push
+        git commit -m "🚀 Performance optimization suggestions
+        
+        Based on automated analysis:
+        - Identified optimization opportunities
+        - Generated optimized code examples
+        - Documented expected improvements
+        
+        See optimization-report.md for details"
+        
+        git push origin $BRANCH
+        
+        # Create PR
+        gh pr create \
+          --title "🚀 Performance Optimizations - $(date +%B)" \
+          --body "## Performance Optimization Analysis
+          
+          This PR contains optimization suggestions generated by claude-yolt.
+          
+          ### Summary:
+          $(grep -A 3 "Expected performance gain" optimization-report.md | head -20)
+          
+          ### Files:
+          - \`docs/performance/optimization-report.md\` - Full analysis
+          - \`lib/optimized-code.js.example\` - Example optimized code
+          
+          ### Next Steps:
+          1. Review the suggestions
+          2. Implement the most impactful ones
+          3. Benchmark before/after
+          
+          ---
+          *Generated by claude-yolt performance optimizer*" \
+          --label "performance,enhancement"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Benchmark Comparison
+      run: |
+        # Create visual benchmark comparison
+        claude-yolt "Create a benchmark comparison report:
+        
+        Data:
+        $(cat performance-baseline.txt)
+        
+        Generate:
+        1. Performance comparison table
+        2. Overhead percentage calculation
+        3. Recommendations for different use cases
+        4. Settings for optimal performance
+        
+        Format as markdown with tables" > benchmark-report.md 2>&1
+        
+        # Create issue if significant overhead
+        if grep -q "overhead: [5-9][0-9]%\|overhead: [1-9][0-9][0-9]%" benchmark-report.md; then
+          gh issue create --title "⚠️ High performance overhead detected" \
+            --body "$(cat benchmark-report.md)" \
+            --label "performance,urgent"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
