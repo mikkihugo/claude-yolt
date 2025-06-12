@@ -1,0 +1,176 @@
+name: OpenRouter Models & Pricing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly check for new models
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-models:
+    runs-on: ubuntu-latest
+    steps:
+    - name: List Available Models
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## 🤖 OpenRouter Available Models"
+        echo ""
+        
+        # Get model list
+        models=$(curl -s https://openrouter.ai/api/v1/models \
+          -H "Authorization: Bearer $OPENROUTER_API_KEY" | jq -r '.data')
+        
+        # Show Claude models
+        echo "### Claude Models:"
+        echo "$models" | jq -r '.[] | select(.id | contains("claude")) | "\(.id) - $\(.pricing.prompt)/1k tokens"'
+        echo ""
+        
+        # Show free models
+        echo "### Free Models:"
+        echo "$models" | jq -r '.[] | select(.pricing.prompt == "0") | "\(.id) - FREE"'
+        echo ""
+        
+        # Show cheapest models
+        echo "### Cheapest Models (<$0.0001/1k):"
+        echo "$models" | jq -r '.[] | select((.pricing.prompt | tonumber) < 0.0001) | "\(.id) - $\(.pricing.prompt)/1k tokens"'
+
+    - name: Test Free Models
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## Testing Free Models"
+        
+        # Free models to test
+        free_models=(
+          "nousresearch/hermes-3-llama-3.1-405b:free"
+          "meta-llama/llama-3.2-90b-vision-instruct:free"
+          "google/gemini-flash-1.5:free"
+          "microsoft/phi-3-mini-128k-instruct:free"
+          "huggingfaceh4/zephyr-7b-beta:free"
+        )
+        
+        for model in "${free_models[@]}"; do
+          echo "### Testing: $model"
+          
+          response=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -H "HTTP-Referer: https://github.com/mikkihugo/claude-yolt" \
+            -d '{
+              "model": "'$model'",
+              "messages": [{
+                "role": "user",
+                "content": "Is activeProcesses.set(pid, info) thread-safe in Node.js? Answer in one sentence."
+              }],
+              "max_tokens": 50
+            }' 2>&1)
+          
+          if echo "$response" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+            echo "✅ Response: $(echo "$response" | jq -r '.choices[0].message.content')"
+          else
+            echo "❌ Failed: $(echo "$response" | jq -r '.error.message // "Unknown error"')"
+          fi
+          echo ""
+        done
+
+  claude-comparison:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Compare Claude Models
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## Claude Model Comparison"
+        echo ""
+        
+        # Claude models with pricing
+        cat > models.md << 'EOF'
+        ### Claude Models on OpenRouter:
+        
+        | Model | Input Price | Output Price | Context | Best For |
+        |-------|------------|--------------|---------|----------|
+        | claude-3.5-haiku | $0.001/1k | $0.005/1k | 200k | Fast, cheap tasks |
+        | claude-3.5-sonnet | $0.003/1k | $0.015/1k | 200k | Balanced performance |
+        | claude-3-opus | $0.015/1k | $0.075/1k | 200k | Complex reasoning |
+        
+        ### Free Alternatives:
+        
+        | Model | Context | Quality | Best For |
+        |-------|---------|---------|----------|
+        | hermes-3-llama-3.1-405b:free | 128k | Excellent | Code review |
+        | gemini-flash-1.5:free | 1M | Very Good | Large context |
+        | llama-3.2-90b-vision:free | 128k | Good | General tasks |
+        | phi-3-mini-128k:free | 128k | Decent | Quick checks |
+        
+        ### For claude-yolt Code Review:
+        1. **Budget**: Use gemini-flash-1.5:free
+        2. **Quality**: Use hermes-3-llama-3.1-405b:free
+        3. **Claude-like**: Use claude-3.5-haiku ($0.001/1k)
+        EOF
+        
+        cat models.md
+        
+        # Create issue with comparison
+        gh issue create --title "📊 Model Comparison & Pricing" \
+          --body "$(cat models.md)" \
+          --label "documentation"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test-claude-yolt-review:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        model: [
+          "nousresearch/hermes-3-llama-3.1-405b:free",
+          "google/gemini-flash-1.5:free",
+          "anthropic/claude-3.5-haiku"
+        ]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Review with ${{ matrix.model }}
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## Testing model: ${{ matrix.model }}"
+        
+        # Extract model name for display
+        model_name=$(echo "${{ matrix.model }}" | cut -d'/' -f2)
+        
+        # Review critical code
+        response=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+          -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          -H "Content-Type: application/json" \
+          -H "HTTP-Referer: https://github.com/mikkihugo/claude-yolt" \
+          -d '{
+            "model": "${{ matrix.model }}",
+            "messages": [
+              {
+                "role": "system",
+                "content": "You are reviewing claude-yolt, which intercepts process spawning to fix bugs."
+              },
+              {
+                "role": "user",
+                "content": "Find bugs in this process queue:\n```js\nfunction trySpawnNext() {\n  if (activeProcesses.size >= maxConcurrent || processQueue.length === 0) return;\n  const next = processQueue.shift();\n  const childProcess = originalSpawn.apply(this, next.args);\n  activeProcesses.set(childProcess.pid, next);\n}\n```"
+              }
+            ],
+            "temperature": 0.2,
+            "max_tokens": 300
+          }')
+        
+        echo "### Response:"
+        echo "$response" | jq -r '.choices[0].message.content // .error.message'
+        echo ""
+        echo "### Cost:"
+        if [[ "${{ matrix.model }}" == *":free"* ]]; then
+          echo "💚 FREE!"
+        else
+          echo "$response" | jq -r '"💰 ~$" + (.usage.prompt_tokens * 0.001 / 1000 | tostring)'
+        fi

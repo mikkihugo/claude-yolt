@@ -1,0 +1,205 @@
+name: Advanced AI Models Review
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  test-reasoning-models:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        model: [
+          # Reasoning Models
+          "deepseek/deepseek-r1:free",
+          "deepseek/deepseek-r1-distill-llama-70b:free",
+          "deepseek/deepseek-r1-distill-qwen-32b:free",
+          
+          # Other powerful free models
+          "nousresearch/hermes-3-llama-3.1-405b:free",
+          "meta-llama/llama-3.2-90b-vision-instruct:free",
+          "google/gemini-flash-1.5:free",
+          "google/gemini-pro-1.5:free",
+          "cohere/command-r-plus-08-2024:free",
+          
+          # Mistral models
+          "mistralai/mistral-large-2411:free",
+          "mistralai/codestral-2405:free",
+          
+          # Qwen models  
+          "qwen/qwen-2.5-coder-32b-instruct:free",
+          "qwen/qwen-2-vl-72b-instruct:free"
+        ]
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Test ${{ matrix.model }}
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## Testing: ${{ matrix.model }}"
+        
+        # For reasoning models, use step-by-step analysis
+        if [[ "${{ matrix.model }}" == *"r1"* ]]; then
+          prompt="Think step by step to find bugs in this code:
+          
+          \`\`\`javascript
+          const activeProcesses = new Map();
+          const processQueue = [];
+          
+          function trySpawnNext() {
+            if (activeProcesses.size >= maxConcurrent || processQueue.length === 0) return;
+            const next = processQueue.shift();
+            const childProcess = originalSpawn.apply(this, next.args);
+            activeProcesses.set(childProcess.pid, next);
+          }
+          \`\`\`
+          
+          Show your reasoning process."
+        else
+          prompt="Find potential bugs in this process queue management code:
+          
+          \`\`\`javascript
+          const activeProcesses = new Map();
+          const processQueue = [];
+          
+          function trySpawnNext() {
+            if (activeProcesses.size >= maxConcurrent || processQueue.length === 0) return;
+            const next = processQueue.shift();
+            const childProcess = originalSpawn.apply(this, next.args);
+            activeProcesses.set(childProcess.pid, next);
+          }
+          \`\`\`"
+        fi
+        
+        # Make request
+        response=$(curl -s -w "\nHTTP_CODE:%{http_code}" https://openrouter.ai/api/v1/chat/completions \
+          -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          -H "Content-Type: application/json" \
+          -H "HTTP-Referer: https://github.com/mikkihugo/claude-yolt" \
+          -d '{
+            "model": "${{ matrix.model }}",
+            "messages": [{
+              "role": "user",
+              "content": "'"$prompt"'"
+            }],
+            "temperature": 0.1,
+            "max_tokens": 500
+          }')
+        
+        http_code=$(echo "$response" | tail -1 | cut -d: -f2)
+        content=$(echo "$response" | head -n -1)
+        
+        if [ "$http_code" = "200" ]; then
+          echo "✅ Success!"
+          echo "### Response:"
+          echo "$content" | jq -r '.choices[0].message.content' | head -20
+          echo "..."
+          echo ""
+          echo "**Tokens used**: $(echo "$content" | jq -r '.usage.total_tokens // "N/A"')"
+        else
+          echo "❌ Failed with code $http_code"
+          echo "$content" | jq -r '.error.message // "Unknown error"' | head -5
+        fi
+
+  compare-for-yolt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Best Models for claude-yolt
+      run: |
+        cat > best-models.md << 'EOF'
+        # Best AI Models for claude-yolt Code Review
+        
+        ## 🏆 Top Free Models (OpenRouter)
+        
+        ### For Deep Analysis (Reasoning Models)
+        - **deepseek/deepseek-r1:free** - State-of-the-art reasoning, shows thinking process
+        - **deepseek/deepseek-r1-distill-llama-70b:free** - Faster R1 variant
+        - **deepseek/deepseek-r1-distill-qwen-32b:free** - Compact R1 model
+        
+        ### For Code Review
+        - **qwen/qwen-2.5-coder-32b-instruct:free** - Specialized for code
+        - **mistralai/codestral-2405:free** - Mistral's code model
+        - **nousresearch/hermes-3-llama-3.1-405b:free** - Excellent general model
+        
+        ### For Large Context
+        - **google/gemini-flash-1.5:free** - 1M context window!
+        - **google/gemini-pro-1.5:free** - Even better, also 1M context
+        - **cohere/command-r-plus-08-2024:free** - 128k context
+        
+        ### For Speed
+        - **google/gemini-flash-1.5-8b** - $0.000015/1k (not free but super cheap)
+        - **microsoft/phi-3-mini-128k-instruct:free** - Fast and free
+        
+        ## 💰 If You Want Claude
+        - **anthropic/claude-3.5-haiku** - $0.001/1k input (cheapest Claude)
+        - **anthropic/claude-3.5-sonnet** - $0.003/1k input
+        - **anthropic/claude-3-opus** - $0.015/1k input (most capable)
+        
+        ## 🎯 Recommended Workflow for claude-yolt
+        
+        1. **PR Review**: `deepseek-r1:free` for thorough analysis
+        2. **Quick Checks**: `gemini-flash-1.5:free` for speed
+        3. **Code Generation**: `qwen-2.5-coder-32b:free`
+        4. **Bug Hunting**: `hermes-3-llama-3.1-405b:free`
+        EOF
+        
+        cat best-models.md
+
+  setup-best-workflow:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create Optimized Workflow
+      run: |
+        cat > .github/workflows/smart-review.yml << 'EOF'
+        name: Smart AI Review
+        
+        on:
+          pull_request:
+            types: [opened, synchronize]
+        
+        jobs:
+          review:
+            runs-on: ubuntu-latest
+            steps:
+            - uses: actions/checkout@v4
+              with:
+                fetch-depth: 0
+            
+            - name: Analyze with DeepSeek R1
+              env:
+                OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+              run: |
+                # Use reasoning model for complex analysis
+                git diff origin/main...HEAD > changes.diff
+                
+                curl -s https://openrouter.ai/api/v1/chat/completions \
+                  -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  -d '{
+                    "model": "deepseek/deepseek-r1:free",
+                    "messages": [{
+                      "role": "user",
+                      "content": "Analyze these changes to claude-yolt (a process limiter). Think step by step about potential bugs:\n\n'"$(cat changes.diff | head -1000 | jq -Rs .)"'"
+                    }],
+                    "temperature": 0.1,
+                    "max_tokens": 1000
+                  }' | jq -r '.choices[0].message.content' > r1-analysis.md
+                
+                # Post as comment
+                gh pr comment ${{ github.event.pull_request.number }} \
+                  --body "## 🧠 DeepSeek R1 Analysis (Free!)\n\n$(cat r1-analysis.md)"
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        EOF
+        
+        echo "✅ Created optimized workflow using best free models!"
