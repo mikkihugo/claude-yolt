@@ -78,12 +78,27 @@ claude-yolt fixes Claude CLI's process issues:
 
 **ONLY INSTALL IN ISOLATED TEST ENVIRONMENTS:**
 
+### Recommended: Local Installation
+```bash
+# Clone and install locally for easy upgrades
+git clone https://github.com/mikkihugo/claude-yolt.git
+cd claude-yolt
+./install.sh
+
+# To upgrade later:
+git pull
+./install.sh
+```
+
+### Alternative: npm global (not recommended)
 ```bash
 # DANGER: This will compromise your system security
-# ONLY for testing in airgapped, isolated environments
+# Harder to upgrade, use local install instead
 npm install -g claude-yolt
+```
 
-# Safer: Run in isolated container
+### Safer: Run in isolated container
+```bash
 docker run --rm -it node:20 bash
 # Then install inside container only
 ```
