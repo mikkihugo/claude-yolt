@@ -26,6 +26,7 @@ jobs:
 
     - name: Setup Environment
       run: |
+        npm ci || npm install
         npm install -g .
         pip install -q aider-chat
 

@@ -33,6 +33,7 @@ jobs:
 
     - name: Setup
       run: |
+        npm ci || npm install
         npm install -g .
         pip install -q aider-chat
 
@@ -247,6 +248,7 @@ jobs:
 
     - name: Setup
       run: |
+        npm ci || npm install
         npm install -g .
         pip install -q aider-chat
 

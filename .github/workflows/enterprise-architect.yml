@@ -33,6 +33,7 @@ jobs:
 
     - name: Setup Enterprise Tools
       run: |
+        npm ci || npm install
         npm install -g .
         pip install -q aider-chat
         # Install additional architecture analysis tools
