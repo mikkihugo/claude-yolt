@@ -32,3 +32,13 @@ Thumbs.db
 # Build outputs
 dist/
 build/
+
+# Additional build artifacts
+*.tmp
+*.temp
+.cache/
+coverage/
+.nyc_output/
+
+# Session files
+SESSION.md
