@@ -42,6 +42,7 @@ jobs:
       if: github.event_name == 'pull_request'
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Get changed files
         git diff origin/main...HEAD --name-only > changed-files.txt
@@ -81,8 +82,6 @@ jobs:
         # Post review
         gh pr comment ${{ github.event.pull_request.number }} \
           --body "$(cat review.md | head -1000)"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Static Analysis Fallback
       if: failure() || !env.OPENROUTER_API_KEY

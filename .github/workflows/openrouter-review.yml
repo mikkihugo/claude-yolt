@@ -29,6 +29,7 @@ jobs:
       if: github.event_name == 'pull_request'
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Get diff
         git diff origin/main...HEAD > pr-diff.txt
@@ -63,8 +64,6 @@ jobs:
         
         ---
         *Powered by OpenRouter*"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Analyze with Google AI
       env:
