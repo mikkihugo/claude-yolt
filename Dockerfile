@@ -1,5 +1,5 @@
 # Multi-stage build for security and size
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache python3 make g++ git
@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # Runtime stage
-FROM node:20-alpine
+FROM node:24-alpine
 
 # Install runtime dependencies only
 RUN apk add --no-cache \
