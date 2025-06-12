@@ -1,6 +1,6 @@
 {
   "name": "claude-yolt",
-  "version": "0.0.4-alpha",
+  "version": "0.0.6-alpha",
   "description": "Claude CLI wrapper that fixes process explosion bug #1970 with duct tape",
   "type": "module",
   "main": "index.js",

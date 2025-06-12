@@ -4,8 +4,8 @@ use nix::unistd::Pid;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::{System, SystemExt, ProcessExt, PidExt};
-use tokio::sync::{mpsc, Semaphore};
+use sysinfo::{System, Process, Pid as SysinfoPid};
+use tokio::sync::Semaphore;
 use tokio::time;
 use tracing::{error, info, warn};
 
