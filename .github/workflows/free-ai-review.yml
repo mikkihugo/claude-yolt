@@ -1,0 +1,157 @@
+name: Free AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  setup-ai:
+    uses: ./.github/workflows/openrouter-config.yml
+    secrets: inherit
+
+  code-review:
+    needs: setup-ai
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Python for aider
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install AI Tools
+      run: |
+        # Install aider as primary tool
+        pip install aider-chat
+        
+        # Install code analysis tools
+        npm install -g eslint jshint
+
+    - name: Analyze with aider
+      if: github.event_name == 'pull_request'
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        # Get changed files
+        git diff origin/main...HEAD --name-only > changed-files.txt
+        
+        # Use aider for analysis
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          MODEL="openrouter/google/gemini-flash-1.5-8b"
+        else
+          MODEL="gemini/gemini-1.5-flash-latest"  # Free via Google AI Studio
+        fi
+        
+        # Analyze each file
+        echo "## 🤖 AI Code Review" > review.md
+        echo "" >> review.md
+        
+        for file in $(cat changed-files.txt | grep -E '\.(js|json)$'); do
+          if [ -f "$file" ]; then
+            echo "### $file" >> review.md
+            
+            # Use aider to review
+            aider --model $MODEL --message "Review this JavaScript file for:
+            1. Security issues (especially process spawning)
+            2. Performance problems
+            3. Memory leaks
+            4. Error handling
+            
+            File: $file
+            
+            Be concise, focus on actual issues." \
+              --no-git --yes-always --no-stream $file 2>/dev/null >> review.md || \
+              echo "Review failed for $file" >> review.md
+            
+            echo "" >> review.md
+          fi
+        done
+        
+        # Post review
+        gh pr comment ${{ github.event.pull_request.number }} \
+          --body "$(cat review.md | head -1000)"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Static Analysis Fallback
+      if: failure() || !env.OPENROUTER_API_KEY
+      run: |
+        echo "## 📊 Static Analysis Results" > static-review.md
+        echo "" >> static-review.md
+        
+        # Run ESLint
+        echo "### ESLint Results" >> static-review.md
+        npx eslint lib/*.js --format compact >> static-review.md 2>&1 || true
+        
+        # Run JSHint
+        echo "### JSHint Results" >> static-review.md
+        jshint lib/*.js >> static-review.md 2>&1 || true
+        
+        # Basic pattern checks
+        echo "### Pattern Checks" >> static-review.md
+        echo "#### Potential Issues:" >> static-review.md
+        
+        # Check for common issues
+        grep -n "console.log" lib/*.js >> static-review.md 2>&1 || true
+        grep -n "TODO\|FIXME\|XXX" lib/*.js >> static-review.md 2>&1 || true
+        grep -n "process.exit" lib/*.js >> static-review.md 2>&1 || true
+        
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "$(cat static-review.md)"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  free-security-check:
+    needs: setup-ai
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Semgrep
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: >-
+          p/javascript
+          p/security-audit
+          p/nodejs
+          p/command-injection
+
+    - name: Check with free AI
+      run: |
+        # Use free Gemini Flash via aider
+        pip install -q aider-chat
+        
+        # Focus on critical security files
+        for file in lib/process-interceptor.js lib/yolo.js; do
+          aider --model gemini/gemini-1.5-flash-latest \
+            --message "Find security vulnerabilities in this code that bypasses permissions:
+            - Command injection risks
+            - Path traversal
+            - Resource exhaustion
+            Focus on actual exploitable issues" \
+            --no-git --yes-always $file > security-$file.md 2>&1 || true
+        done
+        
+        # Compile report
+        cat security-*.md > security-report.md
+        
+        # Create issue if critical issues found
+        if grep -iE "injection|traversal|exploit" security-report.md; then
+          gh issue create --title "🔒 Security issues found by AI" \
+            --body "$(cat security-report.md | head -500)" \
+            --label "security"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,145 @@
+name: Simple Analysis (No API Key)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  analyze-without-ai:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Dependencies
+      run: |
+        npm ci
+        npm install -g eslint jshint complexity-report
+
+    - name: Complexity Analysis
+      run: |
+        echo "# Code Complexity Report" > complexity-report.md
+        echo "" >> complexity-report.md
+        
+        # Analyze complexity
+        npx cr lib/*.js >> complexity-report.md 2>&1 || true
+        
+        # Find complex functions
+        echo "## Complex Functions (>10 cyclomatic complexity)" >> complexity-report.md
+        grep -A 5 "complexity.*[1-9][0-9]" complexity-report.md || echo "No overly complex functions found" >> complexity-report.md
+
+    - name: Pattern Analysis
+      run: |
+        echo "# Pattern Analysis Report" > pattern-report.md
+        echo "" >> pattern-report.md
+        
+        echo "## Process Spawn Calls" >> pattern-report.md
+        grep -n "spawn\|exec" lib/*.js >> pattern-report.md || true
+        
+        echo "## Event Emitters" >> pattern-report.md
+        grep -n "\.on(\|\.once(\|\.emit(" lib/*.js >> pattern-report.md || true
+        
+        echo "## Maps and Sets" >> pattern-report.md
+        grep -n "new Map\|new Set" lib/*.js >> pattern-report.md || true
+        
+        echo "## Potential Memory Leaks" >> pattern-report.md
+        grep -n "setInterval\|setTimeout" lib/*.js | grep -v "clearInterval\|clearTimeout" >> pattern-report.md || true
+
+    - name: Dependency Check
+      run: |
+        echo "# Dependency Analysis" > deps-report.md
+        echo "" >> deps-report.md
+        
+        echo "## Outdated Packages" >> deps-report.md
+        npm outdated >> deps-report.md || true
+        
+        echo "## Security Audit" >> deps-report.md
+        npm audit >> deps-report.md 2>&1 || true
+        
+        echo "## License Check" >> deps-report.md
+        npx license-checker --summary >> deps-report.md 2>&1 || true
+
+    - name: Performance Baseline
+      run: |
+        # Simple performance test
+        cat > perf-test.js << 'EOF'
+        const { spawn } = require('child_process');
+        const start = Date.now();
+        const procs = [];
+        
+        // Spawn 50 processes
+        for (let i = 0; i < 50; i++) {
+          procs.push(spawn('echo', ['test']));
+        }
+        
+        Promise.all(procs.map(p => new Promise(r => p.on('close', r))))
+          .then(() => {
+            console.log(`Time for 50 processes: ${Date.now() - start}ms`);
+          });
+        EOF
+        
+        echo "# Performance Test" > perf-report.md
+        echo "## Without wrapper:" >> perf-report.md
+        node perf-test.js >> perf-report.md 2>&1
+        
+        echo "## With wrapper:" >> perf-report.md
+        node --require ./lib/process-interceptor.js perf-test.js >> perf-report.md 2>&1 || true
+
+    - name: Create Summary Issue
+      if: github.event_name == 'schedule'
+      run: |
+        # Combine all reports
+        echo "# Weekly Analysis Report - $(date +%Y-%m-%d)" > weekly-report.md
+        echo "" >> weekly-report.md
+        
+        cat complexity-report.md >> weekly-report.md
+        echo "" >> weekly-report.md
+        cat pattern-report.md >> weekly-report.md
+        echo "" >> weekly-report.md
+        cat deps-report.md >> weekly-report.md
+        echo "" >> weekly-report.md
+        cat perf-report.md >> weekly-report.md
+        
+        # Create issue
+        gh issue create --title "📊 Weekly Analysis Report" \
+          --body "$(cat weekly-report.md | head -3000)" \
+          --label "analysis"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: PR Comment
+      if: github.event_name == 'pull_request'
+      run: |
+        # Quick analysis for PRs
+        echo "## 🔍 Quick Analysis" > pr-analysis.md
+        echo "" >> pr-analysis.md
+        
+        # Check what changed
+        git diff origin/main...HEAD --stat >> pr-analysis.md
+        
+        echo "### Complexity Changes" >> pr-analysis.md
+        # Compare complexity before/after
+        git checkout origin/main
+        npx cr lib/*.js > before.txt 2>&1 || true
+        git checkout -
+        npx cr lib/*.js > after.txt 2>&1 || true
+        diff before.txt after.txt >> pr-analysis.md || echo "No significant complexity changes" >> pr-analysis.md
+        
+        gh pr comment ${{ github.event.pull_request.number }} \
+          --body "$(cat pr-analysis.md)"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

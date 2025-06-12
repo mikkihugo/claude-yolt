@@ -1,0 +1,73 @@
+name: Setup OpenRouter for CI
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        required: false
+        type: string
+        default: 'google/gemini-flash-1.5-8b'
+    secrets:
+      OPENROUTER_API_KEY:
+        required: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      api_configured: ${{ steps.check.outputs.configured }}
+    steps:
+    - name: Check API Configuration
+      id: check
+      run: |
+        if [ -n "${{ secrets.OPENROUTER_API_KEY }}" ]; then
+          echo "configured=openrouter" >> $GITHUB_OUTPUT
+        elif [ -n "${{ secrets.GITHUB_TOKEN }}" ]; then
+          echo "configured=github-models" >> $GITHUB_OUTPUT
+        else
+          echo "configured=aider" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Setup API Wrapper
+      run: |
+        # Create a wrapper script that routes to available AI
+        cat > /tmp/ai-query.sh << 'EOF'
+        #!/bin/bash
+        PROMPT="$1"
+        MODEL="${2:-google/gemini-flash-1.5-8b}"
+        
+        # Try OpenRouter first
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          response=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"model\": \"$MODEL\",
+              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
+              \"temperature\": 0.3
+            }")
+          echo "$response" | jq -r '.choices[0].message.content' 2>/dev/null && exit 0
+        fi
+        
+        # Try GitHub Models
+        if [ -n "$GITHUB_TOKEN" ]; then
+          response=$(curl -s https://models.inference.ai.azure.com/chat/completions \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"model\": \"gpt-4o-mini\",
+              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
+              \"temperature\": 0.3
+            }")
+          echo "$response" | jq -r '.choices[0].message.content' 2>/dev/null && exit 0
+        fi
+        
+        # Fallback to aider with free model
+        echo "Using aider as fallback..."
+        pip install -q aider-chat
+        echo "$PROMPT" | aider --model gemini/gemini-1.5-flash-latest --yes-always --no-git 2>/dev/null || \
+          echo "Analysis failed - no AI available"
+        EOF
+        
+        chmod +x /tmp/ai-query.sh
+        echo "AI_QUERY=/tmp/ai-query.sh" >> $GITHUB_ENV

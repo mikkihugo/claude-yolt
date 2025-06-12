@@ -243,6 +243,19 @@ ps aux | grep -E '(claude|cargo|fd|rg)' | wc -l
 sudo reboot
 ```
 
+## CI/CD Features
+
+This project includes GitHub Actions workflows that can use AI for:
+- Code review and analysis
+- Security vulnerability detection  
+- Performance optimization suggestions
+- Bug hunting
+
+**No API key required!** Workflows will use:
+1. Free models (Gemini Flash via aider)
+2. OpenRouter (if `OPENROUTER_API_KEY` secret is set)
+3. Static analysis tools as fallback
+
 ## License
 
 MIT - But seriously, this is a bug demonstration tool. Do not use in production.
