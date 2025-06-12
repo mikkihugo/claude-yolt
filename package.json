@@ -1,11 +1,19 @@
 {
   "name": "claude-yolt",
   "version": "0.0.3-alpha",
-  "description": "Claude CLI wrapper that fixes process explosion bug #1970",
+  "description": "Unified Claude CLI wrapper: YOLT + safety limits + intelligent routing",
   "type": "module",
   "main": "index.js",
   "bin": {
-    "claude-yolt": "bin/claude-yolt"
+    "claude-yolt": "bin/claude-yolt",
+    "claude-yolo": "bin/claude-yolo",
+    "claude-007": "bin/claude-yolt",
+    "claude-airbag": "bin/claude-airbag",
+    "claude-seatbelt": "bin/claude-seatbelt",
+    "claude-router": "bin/claude-router",
+    "claude-yolt-ui": "bin/claude-ui",
+    "claude-yolt-api": "bin/claude-api",
+    "cyolt": "bin/claude"
   },
   "scripts": {
     "build": "node build.js",
@@ -21,6 +29,7 @@
     "cli",
     "yolt",
     "safety",
+    "router",
     "ai",
     "process-manager",
     "bug-fix"
