@@ -31,15 +31,26 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Install dependencies and tools
       run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
         npm install -g .
-        mkdir -p ~/.config/@anthropic-ai/claude-code
-        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
 
     - name: Generate API Documentation
       env:
-        CLAUDE_MAX_PROCESSES: "25"
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
         mkdir -p docs
         
@@ -52,79 +63,143 @@ jobs:
           FILES="lib/${COMPONENT}.js"
         fi
         
-        for file in $FILES; do
-          echo "Documenting $file..."
-          filename=$(basename $file .js)
+        # Setup claude-yolt if API key available
+        if [ -n "$ANTHROPIC_API_KEY" ]; then
+          mkdir -p ~/.config/@anthropic-ai/claude-code
+          echo "{\"apiKey\": \"$ANTHROPIC_API_KEY\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+          echo "Using claude-yolt for documentation generation..."
           
-          claude-yolt "Generate comprehensive API documentation for $file:
-          
-          1. Module overview and purpose
-          2. All exported functions with:
-             - Parameters and types
-             - Return values
-             - Usage examples
-             - Error conditions
-          3. Internal architecture
-          4. Configuration options
-          5. Event emissions
-          6. Integration guide
-          
-          Format as markdown with code examples.
-          
-          Code:
-          $(cat $file)" > "docs/api-${filename}.md" 2>&1
-        done
+          for file in $FILES; do
+            echo "Documenting $file with claude-yolt..."
+            filename=$(basename $file .js)
+            
+            claude-yolt "Generate comprehensive API documentation for $file:
+            
+            1. Module overview and purpose
+            2. All exported functions with parameters, types, return values, usage examples, error conditions
+            3. Internal architecture
+            4. Configuration options
+            5. Event emissions
+            6. Integration guide
+            
+            Format as markdown with code examples." > "docs/api-${filename}.md" 2>&1
+          done
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          echo "Using GitHub Models GPT-4.1 for documentation..."
+          for file in $FILES; do
+            echo "Documenting $file..."
+            filename=$(basename $file .js)
+            
+            curl -s "https://models.inference.ai.azure.com/chat/completions" \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "model": "gpt-4o-2024-11-20",
+                "messages": [{
+                  "role": "user",
+                  "content": "Generate comprehensive API documentation for this JavaScript file:\n\n1. Module overview and purpose\n2. All exported functions with parameters, types, return values, usage examples, error conditions\n3. Internal architecture\n4. Configuration options\n5. Event emissions\n6. Integration guide\n\nFormat as markdown with code examples.\n\nCode:\n'$(cat "$file" | jq -Rs .)''"
+                }],
+                "temperature": 0.1,
+                "max_tokens": 3000
+              }' | jq -r '.choices[0].message.content' > "docs/api-${filename}.md"
+          done
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          echo "Using OpenRouter free models for documentation..."
+          for file in $FILES; do
+            filename=$(basename $file .js)
+            aider --model google/gemini-pro-1.5:free \
+                  --message "Generate comprehensive API documentation: module overview, functions, examples, integration guide" \
+                  "$file" --no-git --yes > "docs/api-${filename}.md"
+          done
+        else
+          echo "No API keys available for documentation generation"
+          for file in $FILES; do
+            filename=$(basename $file .js)
+            echo "## API Documentation for ${filename}" > "docs/api-${filename}.md"
+            echo "Documentation generation skipped - no API key available" >> "docs/api-${filename}.md"
+          done
+        fi
 
     - name: Generate Architecture Diagrams
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Create Mermaid diagrams for claude-yolt architecture:
-        
-        1. Component relationship diagram
-        2. Process flow diagram
-        3. Event flow diagram
-        4. Data flow diagram
-        
-        Show how these components interact:
-        - Main entry (bin/claude-yolt)
-        - Process interceptor
-        - Stream handler
-        - Hang detector
-        - Queue system
-        
-        Output valid Mermaid syntax" > docs/architecture-diagrams.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model google/gemini-pro-1.5:free \
+                --message "Create Mermaid diagrams for claude-yolt: component relationships, process flow, event flow, data flow. Show main entry, process interceptor, stream handler, hang detector, queue system interactions" \
+                lib/ --no-git --yes > docs/architecture-diagrams.md
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o",
+              "messages": [{
+                "role": "user",
+                "content": "Create Mermaid diagrams for claude-yolt architecture:\n\n1. Component relationship diagram\n2. Process flow diagram\n3. Event flow diagram\n4. Data flow diagram\n\nShow how these components interact: Main entry (bin/claude-yolt), Process interceptor, Stream handler, Hang detector, Queue system\n\nOutput valid Mermaid syntax"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2000
+            }' | jq -r '.choices[0].message.content' > docs/architecture-diagrams.md
+        else
+          echo "## Architecture Diagrams" > docs/architecture-diagrams.md
+          echo "Diagram generation skipped - no API key available" >> docs/architecture-diagrams.md
+        fi
 
     - name: Generate Integration Guide
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Create integration guide for claude-yolt:
-        
-        1. Installation methods (npm, git, docker)
-        2. Configuration guide
-        3. Environment variables
-        4. Common use cases with examples
-        5. Troubleshooting guide
-        6. Performance tuning
-        7. Security considerations
-        
-        Include code examples for:
-        - Basic usage
-        - Process limit configuration
-        - CI/CD integration
-        - Docker usage" > docs/integration-guide.md 2>&1
+        if [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-mini",
+              "messages": [{
+                "role": "user",
+                "content": "Create integration guide for claude-yolt:\n\n1. Installation methods (npm, git, docker)\n2. Configuration guide\n3. Environment variables\n4. Common use cases with examples\n5. Troubleshooting guide\n6. Performance tuning\n7. Security considerations\n\nInclude code examples for: Basic usage, Process limit configuration, CI/CD integration, Docker usage"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2500
+            }' | jq -r '.choices[0].message.content' > docs/integration-guide.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model mistralai/mistral-large-2411:free \
+                --message "Create integration guide: installation, configuration, use cases, troubleshooting, performance tuning" \
+                package.json README.md --no-git --yes > docs/integration-guide.md
+        else
+          echo "## Integration Guide" > docs/integration-guide.md
+          echo "Guide generation skipped - no API key available" >> docs/integration-guide.md
+        fi
 
     - name: Generate FAQ
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Generate FAQ for claude-yolt based on the codebase:
-        
-        Common questions about:
-        1. Why processes hang in Claude
-        2. How the interceptor works
-        3. Safety of bypassing permissions
-        4. Process limit configuration
-        5. Debugging issues
-        6. Performance impact
-        7. Compatibility
-        
-        Review issues and code comments for real questions" > docs/FAQ.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model cohere/command-r-plus-08-2024:free \
+                --message "Generate FAQ for claude-yolt: why processes hang, how interceptor works, safety, process limits, debugging, performance, compatibility" \
+                README.md lib/ --no-git --yes > docs/FAQ.md
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-mini",
+              "messages": [{
+                "role": "user",
+                "content": "Generate FAQ for claude-yolt based on common questions about:\n1. Why processes hang in Claude\n2. How the interceptor works\n3. Safety of bypassing permissions\n4. Process limit configuration\n5. Debugging issues\n6. Performance impact\n7. Compatibility"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2000
+            }' | jq -r '.choices[0].message.content' > docs/FAQ.md
+        else
+          echo "## FAQ" > docs/FAQ.md
+          echo "FAQ generation skipped - no API key available" >> docs/FAQ.md
+        fi
 
     - name: Create Documentation PR
       run: |
@@ -139,14 +214,14 @@ jobs:
         git checkout -b $BRANCH
         git add docs/
         git commit -m "📚 Auto-generate documentation
-        
+
         Generated documentation for:
         - API references
         - Architecture diagrams
         - Integration guide
         - FAQ
-        
-        Generated by claude-yolt"
+
+        Generated using free AI models"
         
         git push origin $BRANCH
         
@@ -154,7 +229,7 @@ jobs:
           --title "📚 Documentation Update" \
           --body "## Auto-generated Documentation
           
-          This PR updates documentation using claude-yolt.
+          This PR updates documentation using free AI models (GitHub Models/OpenRouter).
           
           ### Files updated:
           \`\`\`
@@ -176,28 +251,47 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Install dependencies and tools
       run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
         npm install -g .
-        mkdir -p ~/.config/@anthropic-ai/claude-code
-        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
 
     - name: README Improvements
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Suggest improvements for README.md:
-        
-        Current README:
-        $(cat README.md)
-        
-        Suggest:
-        1. Missing sections
-        2. Clarity improvements
-        3. Better examples
-        4. Visual improvements (badges, diagrams)
-        5. SEO optimization
-        6. User journey optimization
-        
-        Keep the same warning tone about security" > readme-suggestions.md 2>&1
+        if [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o",
+              "messages": [{
+                "role": "user",
+                "content": "Suggest improvements for README.md:\n\nCurrent README:\n'$(cat README.md | jq -Rs .)'\n\nSuggest:\n1. Missing sections\n2. Clarity improvements\n3. Better examples\n4. Visual improvements (badges, diagrams)\n5. SEO optimization\n6. User journey optimization\n\nKeep the same warning tone about security"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2000
+            }' | jq -r '.choices[0].message.content' > readme-suggestions.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model google/gemini-pro-1.5:free \
+                --message "Suggest README improvements: missing sections, clarity, examples, visuals, SEO, user journey. Keep security warnings" \
+                README.md --no-git --yes > readme-suggestions.md
+        else
+          echo "## README Improvement Suggestions" > readme-suggestions.md
+          echo "Suggestions skipped - no API key available" >> readme-suggestions.md
+        fi
         
         # Create issue with suggestions
         gh issue create --title "README Improvement Suggestions" \

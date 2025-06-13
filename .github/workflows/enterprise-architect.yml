@@ -1,0 +1,288 @@
+name: Enterprise Architecture Analysis
+
+on:
+  schedule:
+    - cron: '0 0 1 */3 *'  # Quarterly enterprise review
+  workflow_dispatch:
+    inputs:
+      focus_area:
+        description: 'Architecture focus area'
+        required: false
+        type: choice
+        options:
+          - full-analysis
+          - scalability
+          - security-architecture
+          - performance-architecture
+          - integration-patterns
+          - data-architecture
+          - deployment-architecture
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  enterprise-architecture:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm
+          ~/.cache/pip
+          node_modules
+        key: deps-${{ runner.os }}-${{ hashFiles('mise.toml', '**/package-lock.json') }}
+        restore-keys: |
+          deps-${{ runner.os }}-
+        
+    - name: Install dependencies and tools
+      run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install global tools
+        npm install -g . madge dependency-cruiser
+
+    - name: Enterprise Architect Analysis (Heavy Thinking)
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+      run: |
+        echo "## 🏗️ Enterprise Architecture Analysis" > enterprise-analysis.md
+        echo "**Analysis Date**: $(date)" >> enterprise-analysis.md
+        echo "**Focus**: ${{ github.event.inputs.focus_area || 'full-analysis' }}" >> enterprise-analysis.md
+        echo "" >> enterprise-analysis.md
+        
+        # Generate dependency graph
+        echo "Analyzing dependencies..." >> enterprise-analysis.md
+        madge --json lib/ > dependency-graph.json || echo "{}" > dependency-graph.json
+        
+        # Use heavy thinking architect model
+        if [ -n "$GITHUB_TOKEN" ]; then
+          echo "Using GitHub Models GPT-4.1 for enterprise architecture..."
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "system",
+                "content": "You are a Senior Enterprise Architect with 20+ years of experience designing large-scale systems. Think deeply about architecture patterns, scalability, security, and maintainability. Provide detailed analysis with specific recommendations."
+              }, {
+                "role": "user", 
+                "content": "Conduct a comprehensive enterprise architecture analysis of claude-yolt:\n\n**System Overview:**\nClaude-yolt is a process management tool that intercepts and limits subprocess spawning to prevent process explosion in Claude AI interactions.\n\n**Current Architecture:**\n- Process interceptor (core component)\n- Queue management system\n- Stream handling\n- Hang detection\n- Configuration management\n\n**Dependencies:**\n'$(cat dependency-graph.json | jq -r . 2>/dev/null || echo "Analysis failed")'\n\n**Package Info:**\n'$(cat package.json | jq -r .)'\n\n**Focus Area:** ${{ github.event.inputs.focus_area || 'full-analysis' }}\n\nProvide detailed analysis covering:\n1. **Architectural Assessment**: Current state, strengths, weaknesses\n2. **Scalability Analysis**: How well does it scale? Bottlenecks?\n3. **Security Architecture**: Threat model, security patterns, vulnerabilities\n4. **Design Patterns**: Current patterns used, missing patterns needed\n5. **Integration Strategy**: How it integrates with CI/CD, containers, etc.\n6. **Performance Architecture**: Hot paths, optimization opportunities\n7. **Maintainability**: Code organization, modularity, testability\n8. **Enterprise Recommendations**: 5-year roadmap, technical debt\n\nThink step by step and provide actionable recommendations with implementation priorities."
+              }],
+              "temperature": 0.1,
+              "max_tokens": 4000
+            }' | jq -r '.choices[0].message.content' >> enterprise-analysis.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          echo "Using aider dual-mode with heavy thinking..."
+          # Architect: Heavy reasoning model for strategic thinking
+          # Editor: Code specialist for tactical implementation
+          aider --architect deepseek/deepseek-r1:free \
+                --editor qwen/qwen-2.5-coder-32b-instruct:free \
+                --message "As enterprise architects, conduct comprehensive analysis of claude-yolt architecture. Architect should focus on strategic patterns, scalability, security. Editor should focus on code quality, implementation details. Focus: ${{ github.event.inputs.focus_area || 'full-analysis' }}" \
+                package.json lib/ --no-git --yes >> enterprise-analysis.md
+        else
+          echo "⚠️ No API keys available for enterprise analysis" >> enterprise-analysis.md
+        fi
+
+    - name: Grok-3 Strategic Analysis
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "" >> enterprise-analysis.md
+        echo "## 🧠 Grok-3 Strategic Insights" >> enterprise-analysis.md
+        
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Check if Grok-3 is available (may be grok-beta or similar endpoint)
+          curl -s "https://openrouter.ai/api/v1/chat/completions" \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "x-ai/grok-beta",
+              "messages": [{
+                "role": "user",
+                "content": "Provide strategic insights for claude-yolt enterprise architecture:\n\n1. Market positioning: How does this tool fit in the AI tooling ecosystem?\n2. Competitive analysis: What are similar solutions? How to differentiate?\n3. Technology trends: What emerging technologies should influence the roadmap?\n4. Business impact: What enterprise value does this provide?\n5. Innovation opportunities: What novel features could set this apart?\n\nBe creative and think beyond current scope."
+              }],
+              "temperature": 0.3,
+              "max_tokens": 2000
+            }' | jq -r '.choices[0].message.content' >> enterprise-analysis.md 2>/dev/null || {
+              echo "Grok-3 not available, using fallback strategic analysis..." >> enterprise-analysis.md
+              aider --model nousresearch/hermes-3-llama-3.1-405b:free \
+                    --message "Provide strategic enterprise insights: market positioning, competitive analysis, technology trends, business impact, innovation opportunities for claude-yolt" \
+                    --no-git --yes >> enterprise-analysis.md
+            }
+        else
+          echo "Strategic analysis skipped - no API key available" >> enterprise-analysis.md
+        fi
+
+    - name: Technical Debt Assessment
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "" >> enterprise-analysis.md
+        echo "## 📊 Technical Debt Assessment" >> enterprise-analysis.md
+        
+        # Generate metrics
+        echo "**Code Metrics:**" >> enterprise-analysis.md
+        echo "- Total JS files: $(find lib -name '*.js' | wc -l)" >> enterprise-analysis.md
+        echo "- Lines of code: $(find lib -name '*.js' -exec cat {} \; | wc -l)" >> enterprise-analysis.md
+        echo "- Dependencies: $(cat package.json | jq '.dependencies | length')" >> enterprise-analysis.md
+        echo "- Dev dependencies: $(cat package.json | jq '.devDependencies | length // 0')" >> enterprise-analysis.md
+        echo "" >> enterprise-analysis.md
+        
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Use reasoning model for technical debt analysis
+          aider --model deepseek/deepseek-r1:free \
+                --message "Analyze technical debt: code complexity, test coverage gaps, dependency issues, architectural debt, maintainability concerns. Prioritize by impact and effort." \
+                lib/ package.json --no-git --yes >> enterprise-analysis.md
+        fi
+
+    - name: Architecture Decision Records (ADRs)
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        mkdir -p docs/adr
+        
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Generate ADR for key architectural decisions
+          aider --model cohere/command-r-plus-08-2024:free \
+                --message "Generate Architecture Decision Records (ADRs) for key decisions in claude-yolt: process interception approach, queue implementation, stream handling, configuration management. Use standard ADR format." \
+                lib/ --no-git --yes > docs/adr/001-process-interception.md
+        fi
+
+    - name: Enterprise Roadmap
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "" >> enterprise-analysis.md
+        echo "## 🗺️ Enterprise Roadmap" >> enterprise-analysis.md
+        
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Use dual-mode for roadmap planning
+          aider --architect nousresearch/hermes-3-llama-3.1-405b:free \
+                --editor mistralai/mistral-large-2411:free \
+                --message "Create 18-month enterprise roadmap: Q1-Q6 milestones, feature priorities, technical improvements, scalability targets, security enhancements. Include effort estimates." \
+                --no-git --yes >> enterprise-analysis.md
+        fi
+
+    - name: Create Enterprise Architecture PR
+      run: |
+        # Create architecture branch
+        BRANCH="enterprise/architecture-$(date +%Y-%m-%d)"
+        git checkout -b $BRANCH
+        
+        # Add all architecture artifacts
+        git add enterprise-analysis.md
+        git add docs/adr/ || true
+        
+        git commit -m "🏗️ Enterprise Architecture Analysis
+
+        Comprehensive enterprise architecture review including:
+        - Strategic architecture assessment
+        - Technical debt analysis  
+        - Architecture Decision Records
+        - Enterprise roadmap
+        - Grok-3 strategic insights
+
+        Focus: ${{ github.event.inputs.focus_area || 'full-analysis' }}"
+        
+        git push origin $BRANCH
+        
+        # Create PR
+        gh pr create \
+          --title "🏗️ Enterprise Architecture Analysis - $(date +%B %Y)" \
+          --body "## Enterprise Architecture Review
+
+          This PR contains a comprehensive enterprise architecture analysis conducted using AI-powered tools.
+
+          ### 🎯 Analysis Scope
+          - **Focus Area**: ${{ github.event.inputs.focus_area || 'full-analysis' }}
+          - **Models Used**: GPT-4.1, DeepSeek-R1, Qwen 2.5 Coder, Grok-3
+          - **Analysis Type**: Enterprise-grade architectural assessment
+
+          ### 📋 Deliverables
+          - ✅ **Strategic Assessment**: Architecture strengths/weaknesses
+          - ✅ **Scalability Analysis**: Performance and bottleneck identification  
+          - ✅ **Security Architecture**: Threat modeling and security patterns
+          - ✅ **Technical Debt**: Code quality and maintainability assessment
+          - ✅ **Enterprise Roadmap**: 18-month strategic plan
+          - ✅ **ADRs**: Architecture Decision Records
+          - ✅ **Strategic Insights**: Market positioning and innovation opportunities
+
+          ### 🔍 Key Findings
+          $(grep -A 5 "Key Recommendations\|Critical Issues\|Priority" enterprise-analysis.md | head -20 || echo "See full analysis in enterprise-analysis.md")
+
+          ### 📊 Metrics
+          - Code files analyzed: $(find lib -name '*.js' | wc -l)
+          - Dependencies reviewed: $(cat package.json | jq '.dependencies | length')
+          - Analysis depth: Enterprise-grade
+
+          ### 🚀 Next Steps
+          1. Review architecture recommendations
+          2. Prioritize technical debt items
+          3. Implement quick wins
+          4. Plan major architectural improvements
+
+          ---
+          *Generated using enterprise-grade AI architecture tools*" \
+          --label "architecture,enterprise,enhancement"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  create-architecture-issue:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create Quarterly Architecture Review Issue
+      run: |
+        gh issue create \
+          --title "📅 Quarterly Enterprise Architecture Review - Q$((($(date +%-m)-1)/3+1)) $(date +%Y)" \
+          --body "## Quarterly Architecture Review
+
+        It's time for our quarterly enterprise architecture review!
+
+        ### 🎯 Objectives
+        - [ ] Review current architecture against enterprise standards
+        - [ ] Assess scalability and performance characteristics
+        - [ ] Identify technical debt and improvement opportunities
+        - [ ] Update enterprise roadmap
+        - [ ] Security architecture assessment
+
+        ### 🔧 Action Items
+        - [ ] Run enterprise architecture workflow
+        - [ ] Review generated analysis and recommendations
+        - [ ] Update Architecture Decision Records (ADRs)
+        - [ ] Plan implementation of priority improvements
+        - [ ] Update documentation
+
+        ### 📊 Focus Areas This Quarter
+        - Process interception optimization
+        - Stream handling scalability
+        - Security hardening
+        - CI/CD integration improvements
+        - Performance monitoring
+
+        **Trigger the Enterprise Architecture Analysis workflow to begin the review.**" \
+          --label "architecture,quarterly-review,epic" \
+          --assignee "${{ github.repository_owner }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

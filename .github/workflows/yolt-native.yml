@@ -74,6 +74,7 @@ jobs:
       env:
         CLAUDE_MAX_PROCESSES: "20"
         CLAUDE_PROCESS_DELAY: "100"
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Get diff
         git diff origin/main...HEAD > pr-changes.diff
@@ -104,8 +105,6 @@ jobs:
         *Review performed by claude-yolt itself (inception! 🌀)*
         
         Process limits: MAX=$CLAUDE_MAX_PROCESSES, DELAY=$CLAUDE_PROCESS_DELAY"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Analyze with claude-yolt
       if: github.event_name == 'push'

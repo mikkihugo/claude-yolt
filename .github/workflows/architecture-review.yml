@@ -24,18 +24,54 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup Environment
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Install dependencies and tools
       run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
         npm install -g .
-        mkdir -p ~/.config/@anthropic-ai/claude-code
-        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
 
     - name: Architecture Analysis
       env:
-        CLAUDE_MAX_PROCESSES: "30"
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Generate architecture overview
-        claude-yolt "Analyze the architecture of claude-yolt:
+        # Use GitHub Models API or OpenRouter free models
+        if [ -n "$GITHUB_TOKEN" ]; then
+          echo "Using GitHub Models API (free)"
+          MODEL_URL="https://models.inference.ai.azure.com/chat/completions"
+          MODEL_NAME="gpt-4o-2024-11-20"
+          AUTH_HEADER="Authorization: Bearer $GITHUB_TOKEN"
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          echo "Using OpenRouter free models"
+          MODEL_URL="https://openrouter.ai/api/v1/chat/completions"
+          MODEL_NAME="nousresearch/hermes-3-llama-3.1-405b:free"
+          AUTH_HEADER="Authorization: Bearer $OPENROUTER_API_KEY"
+        else
+          echo "Fallback to aider with free models"
+          aider --model qwen/qwen-2.5-coder-32b-instruct:free \
+                --message "Analyze claude-yolt architecture" \
+                lib/ --no-git --yes > architecture-report.md 2>&1
+          exit 0
+        fi
+        
+        # Generate architecture overview using free AI models
+        curl -s "$MODEL_URL" \
+          -H "$AUTH_HEADER" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "model": "'$MODEL_NAME'",
+            "messages": [{
+              "role": "user",
+              "content": "Analyze the architecture of claude-yolt:
         
         1. Component relationships and dependencies
         2. Design patterns used
@@ -50,51 +86,68 @@ jobs:
         - Queue management patterns
         - Error handling strategies
         
-        Be specific about file locations and line numbers." > architecture-report.md 2>&1
+        Be specific about file locations and line numbers."
+            }],
+            "temperature": 0.1,
+            "max_tokens": 2000
+          }' | jq -r '.choices[0].message.content' > architecture-report.md
 
     - name: Design Patterns Review
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Review design patterns in claude-yolt:
+        if [ -n "$GITHUB_TOKEN" ]; then
+          MODEL_URL="https://models.inference.ai.azure.com/chat/completions"
+          MODEL_NAME="gpt-4o-2024-11-20"
+          AUTH_HEADER="Authorization: Bearer $GITHUB_TOKEN"
+        else
+          MODEL_URL="https://openrouter.ai/api/v1/chat/completions"
+          MODEL_NAME="qwen/qwen-2.5-coder-32b-instruct:free"
+          AUTH_HEADER="Authorization: Bearer $OPENROUTER_API_KEY"
+        fi
         
-        1. Identify current patterns (Observer, Factory, Singleton, etc.)
-        2. Suggest missing patterns that could improve the code
-        3. Anti-patterns to refactor
-        4. SOLID principles compliance
-        5. DRY violations
-        
-        Review files:
-        $(find lib -name '*.js' | head -10)" >> architecture-report.md 2>&1
+        curl -s "$MODEL_URL" \
+          -H "$AUTH_HEADER" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "model": "'$MODEL_NAME'",
+            "messages": [{
+              "role": "user",
+              "content": "Review design patterns in claude-yolt:\n\n1. Identify current patterns (Observer, Factory, Singleton, etc.)\n2. Suggest missing patterns that could improve the code\n3. Anti-patterns to refactor\n4. SOLID principles compliance\n5. DRY violations\n\nReview files: lib/"
+            }],
+            "temperature": 0.1,
+            "max_tokens": 1500
+          }' | jq -r '.choices[0].message.content' >> architecture-report.md
 
     - name: Dependency Analysis
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Analyze dependencies
-        claude-yolt "Analyze claude-yolt's dependencies:
-        
-        Package.json:
-        $(cat package.json)
-        
-        Check for:
-        1. Unused dependencies
-        2. Security risks in dependencies
-        3. Better alternatives
-        4. Version pinning strategy
-        5. Circular dependencies in code
-        
-        Internal module dependencies:
-        $(find lib -name '*.js' -exec grep -l "require\\|import" {} \; | head -20)" >> architecture-report.md 2>&1
+        # Use aider for dependency analysis (fallback to free models)
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model deepseek/deepseek-r1:free \
+                --message "Analyze package.json dependencies for security risks, unused deps, and better alternatives" \
+                package.json --no-git --yes >> architecture-report.md
+        else
+          echo "## Dependency Analysis" >> architecture-report.md
+          echo "OpenRouter API key not available for dependency analysis" >> architecture-report.md
+          npm audit --audit-level=moderate >> architecture-report.md 2>&1 || true
+        fi
 
     - name: Performance Architecture
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
-        claude-yolt "Analyze performance architecture:
-        
-        1. Bottlenecks in process queue design
-        2. Memory leak potential in Maps/Sets
-        3. Stream handling efficiency
-        4. Event emitter patterns
-        5. Async/await vs callbacks usage
-        
-        Focus on:
-        $(cat lib/process-interceptor.js | head -200)" >> architecture-report.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model nousresearch/hermes-3-llama-3.1-405b:free \
+                --message "Analyze performance architecture: bottlenecks, memory leaks, stream efficiency, event patterns" \
+                lib/process-interceptor.js --no-git --yes >> architecture-report.md
+        else
+          echo "## Performance Architecture" >> architecture-report.md
+          echo "Analysis skipped - no API key available" >> architecture-report.md
+        fi
 
     - name: Create Architecture Issue
       if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -129,17 +182,28 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Install dependencies and tools
       run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
         npm install -g .
-        mkdir -p ~/.config/@anthropic-ai/claude-code
-        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
 
     - name: Code Smell Detection
       env:
-        CLAUDE_MAX_PROCESSES: "20"
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
-        claude-yolt "Detect code smells in claude-yolt:
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model qwen/qwen-2.5-coder-32b-instruct:free \
+                --message "Detect code smells in claude-yolt:
         
         1. Long methods (>50 lines)
         2. Deep nesting (>3 levels)
@@ -150,41 +214,41 @@ jobs:
         7. Missing error handling
         8. Console.log left in code
         
-        Scan all JS files and report specific locations:" > code-quality.md 2>&1
+        Scan all JS files and report specific locations" \
+                lib/ --no-git --yes > code-quality.md
+        else
+          echo "## Code Smell Detection" > code-quality.md
+          echo "Analysis skipped - no API key available" >> code-quality.md
+        fi
 
     - name: Refactoring Suggestions
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
-        # Get most complex file
-        COMPLEX_FILE=$(find lib -name '*.js' -exec wc -l {} \; | sort -rn | head -1 | awk '{print $2}')
-        
-        claude-yolt "Suggest refactoring for $COMPLEX_FILE:
-        
-        1. Extract methods
-        2. Reduce complexity
-        3. Improve readability
-        4. Add missing JSDoc
-        5. Improve error messages
-        
-        Provide specific code examples" >> code-quality.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Get most complex file
+          COMPLEX_FILE=$(find lib -name '*.js' -exec wc -l {} \; | sort -rn | head -1 | awk '{print $2}')
+          
+          aider --model mistralai/codestral-2405:free \
+                --message "Suggest refactoring: extract methods, reduce complexity, improve readability, add JSDoc" \
+                "$COMPLEX_FILE" --no-git --yes >> code-quality.md
+        else
+          echo "## Refactoring Suggestions" >> code-quality.md
+          echo "Analysis skipped - no API key available" >> code-quality.md
+        fi
 
     - name: Test Coverage Analysis
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
-        claude-yolt "Analyze test coverage needs:
-        
-        Current test file:
-        $(cat test.js 2>/dev/null || echo 'No tests found')
-        
-        Suggest:
-        1. Missing test cases
-        2. Edge cases to cover
-        3. Integration test scenarios
-        4. Performance test cases
-        5. Error handling tests
-        
-        For critical components:
-        - Process interceptor
-        - Stream handler
-        - Hang detector" >> code-quality.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model deepseek/deepseek-r1:free \
+                --message "Analyze test coverage needs: missing test cases, edge cases, integration tests, performance tests" \
+                test.js lib/ --no-git --yes >> code-quality.md
+        else
+          echo "## Test Coverage Analysis" >> code-quality.md
+          echo "Analysis skipped - no API key available" >> code-quality.md
+        fi
 
     - name: Create Quality Report
       if: github.event_name == 'schedule'
@@ -200,17 +264,58 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Install dependencies and tools
       run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
         npm install -g .
-        mkdir -p ~/.config/@anthropic-ai/claude-code
-        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
 
     - name: Security Architecture Review
       env:
-        CLAUDE_MAX_PROCESSES: "20"
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
-        claude-yolt "Comprehensive security review of claude-yolt:
+        # Use claude-yolt for security analysis if available (dogfooding our own tool)
+        if [ -n "$ANTHROPIC_API_KEY" ]; then
+          mkdir -p ~/.config/@anthropic-ai/claude-code
+          echo "{\"apiKey\": \"$ANTHROPIC_API_KEY\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+          echo "Using claude-yolt for security architecture review..."
+          
+          claude-yolt "Comprehensive security review of claude-yolt:
+          
+          1. Permission bypass implications
+          2. Process injection risks
+          3. Command injection vulnerabilities
+          4. Path traversal risks
+          5. Resource exhaustion attacks
+          6. Privilege escalation paths
+          7. Supply chain risks
+          
+          This tool bypasses security by design - focus on:
+          - Unintended escalations
+          - Additional attack vectors
+          - Mitigation strategies
+          
+          Be thorough and specific about file locations and line numbers." > security-architecture.md 2>&1
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user",
+                "content": "Comprehensive security review of claude-yolt:
         
         1. Permission bypass implications
         2. Process injection risks
@@ -220,30 +325,35 @@ jobs:
         6. Privilege escalation paths
         7. Supply chain risks
         
-        Review:
-        $(find . -name '*.js' -exec grep -l "spawn\\|exec\\|eval" {} \;)
-        
         This tool bypasses security by design - focus on:
         - Unintended escalations
         - Additional attack vectors
-        - Mitigation strategies" > security-architecture.md 2>&1
+        - Mitigation strategies"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2000
+            }' | jq -r '.choices[0].message.content' > security-architecture.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model deepseek/deepseek-r1:free \
+                --message "Security review: permission bypass, injection risks, attack vectors" \
+                lib/ --no-git --yes > security-architecture.md
+        else
+          echo "## Security Architecture Review" > security-architecture.md
+          echo "Analysis skipped - no API key available" >> security-architecture.md
+        fi
 
     - name: Threat Modeling
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
-        claude-yolt "Create threat model for claude-yolt:
-        
-        1. Actor: Malicious user with claude-yolt installed
-        2. Actor: Compromised dependency
-        3. Actor: Malicious Claude API responses
-        4. Actor: System attacker via process limits
-        
-        For each threat:
-        - Attack vector
-        - Impact
-        - Likelihood
-        - Mitigation
-        
-        Remember this tool already bypasses permissions" >> security-architecture.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model nousresearch/hermes-3-llama-3.1-405b:free \
+                --message "Create threat model: malicious users, compromised deps, API attacks, process limits" \
+                lib/ --no-git --yes >> security-architecture.md
+        else
+          echo "## Threat Modeling" >> security-architecture.md
+          echo "Analysis skipped - no API key available" >> security-architecture.md
+        fi
 
     - name: Create Security Report
       if: contains(fromJSON('["schedule", "workflow_dispatch"]'), github.event_name)

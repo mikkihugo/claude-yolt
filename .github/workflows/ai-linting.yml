@@ -1,0 +1,360 @@
+name: AI-Powered Linting & Code Quality
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      model_size:
+        description: 'Phi-4 model size'
+        required: false
+        type: choice
+        default: '14b'
+        options:
+          - '14b'
+          - '8b'
+          - '4b'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  ai-linting:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.npm
+          ~/.cache/pip
+          node_modules
+        key: deps-${{ runner.os }}-${{ hashFiles('mise.toml', '**/package-lock.json') }}
+        restore-keys: |
+          deps-${{ runner.os }}-
+        
+    - name: Install dependencies and tools
+      run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install global tools
+        npm install -g . eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin jshint standard
+
+    - name: Traditional Linting (Baseline)
+      run: |
+        echo "## 🔍 Traditional Linting Results" > linting-report.md
+        echo "" >> linting-report.md
+        
+        # ESLint
+        echo "### ESLint Results" >> linting-report.md
+        echo "\`\`\`" >> linting-report.md
+        npx eslint lib/ bin/ --ext .js --format compact 2>&1 | head -50 >> linting-report.md || true
+        echo "\`\`\`" >> linting-report.md
+        echo "" >> linting-report.md
+        
+        # JSHint
+        echo "### JSHint Results" >> linting-report.md
+        echo "\`\`\`" >> linting-report.md
+        find lib bin -name "*.js" -exec jshint {} \; 2>&1 | head -30 >> linting-report.md || true
+        echo "\`\`\`" >> linting-report.md
+        echo "" >> linting-report.md
+
+    - name: Microsoft Phi-4 Advanced Linting
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+      run: |
+        echo "## 🤖 Microsoft Phi-4 Advanced Code Analysis" >> linting-report.md
+        echo "**Model**: microsoft/phi-4-${{ github.event.inputs.model_size || '14b' }}:free" >> linting-report.md
+        echo "**Context**: 128K tokens" >> linting-report.md
+        echo "" >> linting-report.md
+        
+        # Get changed files for PR, or all files for push
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(js|mjs)$' || echo "")
+        else
+          FILES=$(find lib bin -name "*.js" | head -10)
+        fi
+        
+        if [ -n "$FILES" ]; then
+          echo "**Files analyzed**: $(echo "$FILES" | wc -l)" >> linting-report.md
+          echo "" >> linting-report.md
+          
+          # Use Microsoft Phi-4 for advanced code analysis with fallback chain
+          if [ -n "$OPENROUTER_API_KEY" ]; then
+            # Try different Phi-4 model sizes
+            PHI_MODEL="microsoft/phi-4-${{ github.event.inputs.model_size || '14b' }}:free"
+            
+            echo "Analyzing with $PHI_MODEL..." >> linting-report.md
+            
+            for file in $FILES; do
+              if [ -f "$file" ]; then
+                echo "### Analysis: $file" >> linting-report.md
+                
+                # Use aider with Phi-4 for detailed code analysis
+                aider --model "$PHI_MODEL" \
+                      --message "Perform comprehensive code analysis for this JavaScript file. Focus on:
+
+1. **Code Quality Issues**: 
+   - Unused variables/functions
+   - Dead code
+   - Complex functions (>20 lines)
+   - Deep nesting (>3 levels)
+   - Magic numbers/strings
+
+2. **Performance Issues**:
+   - Inefficient algorithms
+   - Memory leaks potential
+   - Blocking operations
+   - Unnecessary computations
+
+3. **Security Concerns**:
+   - Input validation
+   - Command injection risks
+   - Path traversal
+   - Unsafe operations
+
+4. **Maintainability**:
+   - Code duplication
+   - Poor naming
+   - Missing documentation
+   - Tight coupling
+
+5. **Best Practices**:
+   - Modern JavaScript usage
+   - Error handling
+   - Async/await patterns
+   - Proper module structure
+
+Provide specific line numbers and actionable fixes. Be concise but thorough." \
+                      "$file" --no-git --yes 2>&1 | head -100 >> linting-report.md || echo "Analysis failed for $file" >> linting-report.md
+                
+                echo "" >> linting-report.md
+              fi
+            done
+          elif [ -n "$HF_API_KEY" ]; then
+            # Fallback to Hugging Face models
+            echo "Using Hugging Face models as fallback..." >> linting-report.md
+            
+            for file in $FILES; do
+              if [ -f "$file" ]; then
+                echo "### HF Analysis: $file" >> linting-report.md
+                
+                # Use Hugging Face Inference API for code analysis
+                curl -s "https://api-inference.huggingface.co/models/microsoft/DialoGPT-large" \
+                  -H "Authorization: Bearer $HF_API_KEY" \
+                  -H "Content-Type: application/json" \
+                  -d '{
+                    "inputs": "Analyze this JavaScript code for quality issues, performance problems, and security concerns:\n\n'$(cat "$file" | head -50 | jq -Rs .)'",
+                    "parameters": {
+                      "max_new_tokens": 500,
+                      "temperature": 0.1
+                    }
+                  }' | jq -r '.generated_text // .error // "Analysis failed"' >> linting-report.md 2>/dev/null || echo "HF analysis failed for $file" >> linting-report.md
+                
+                echo "" >> linting-report.md
+              fi
+            done
+          elif [ -n "$GITHUB_TOKEN" ]; then
+            # Fallback to GitHub Models GPT-4.1
+            echo "Using GitHub Models GPT-4.1 as fallback..." >> linting-report.md
+            
+            for file in $FILES; do
+              if [ -f "$file" ]; then
+                echo "### Analysis: $file" >> linting-report.md
+                
+                curl -s "https://models.inference.ai.azure.com/chat/completions" \
+                  -H "Authorization: Bearer $GITHUB_TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -d '{
+                    "model": "gpt-4o-2024-11-20",
+                    "messages": [{
+                      "role": "user",
+                      "content": "Analyze this JavaScript code for quality, performance, security, and maintainability issues. Provide specific line numbers and fixes:\n\n'$(cat "$file" | jq -Rs .)''"
+                    }],
+                    "temperature": 0.1,
+                    "max_tokens": 1500
+                  }' | jq -r '.choices[0].message.content' >> linting-report.md
+                
+                echo "" >> linting-report.md
+              fi
+            done
+          else
+            echo "No API keys available for AI analysis" >> linting-report.md
+          fi
+        else
+          echo "No JavaScript files to analyze" >> linting-report.md
+        fi
+
+    - name: Comparative Analysis (Traditional vs AI)
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "" >> linting-report.md
+        echo "## 📊 Traditional vs AI Linting Comparison" >> linting-report.md
+        
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Use a fast model for comparison analysis
+          aider --model microsoft/phi-3-mini-128k-instruct:free \
+                --message "Compare traditional linting (ESLint, JSHint) vs AI-powered analysis. Which issues did each catch? What did AI find that traditional tools missed? Summarize effectiveness." \
+                --no-git --yes < linting-report.md >> linting-report.md
+        else
+          echo "Comparison analysis skipped - no API key available" >> linting-report.md
+        fi
+
+    - name: Generate Code Quality Score
+      run: |
+        echo "" >> linting-report.md
+        echo "## 🎯 Code Quality Score" >> linting-report.md
+        
+        # Count issues from different sources
+        ESLINT_ISSUES=$(grep -c "error\|warning" linting-report.md || echo "0")
+        AI_ISSUES=$(grep -c "Issue:\|Problem:\|Warning:" linting-report.md || echo "0")
+        FILES_ANALYZED=$(find lib bin -name "*.js" | wc -l)
+        
+        # Calculate rough quality score (inverse of issues per file)
+        TOTAL_ISSUES=$((ESLINT_ISSUES + AI_ISSUES))
+        if [ "$FILES_ANALYZED" -gt 0 ]; then
+          ISSUES_PER_FILE=$((TOTAL_ISSUES * 100 / FILES_ANALYZED))
+          QUALITY_SCORE=$((100 - ISSUES_PER_FILE))
+          if [ "$QUALITY_SCORE" -lt 0 ]; then
+            QUALITY_SCORE=0
+          fi
+        else
+          QUALITY_SCORE=100
+        fi
+        
+        echo "- **Files Analyzed**: $FILES_ANALYZED" >> linting-report.md
+        echo "- **Traditional Linting Issues**: $ESLINT_ISSUES" >> linting-report.md  
+        echo "- **AI-Detected Issues**: $AI_ISSUES" >> linting-report.md
+        echo "- **Total Issues**: $TOTAL_ISSUES" >> linting-report.md
+        echo "- **Quality Score**: $QUALITY_SCORE/100" >> linting-report.md
+        
+        # Create quality badge
+        if [ "$QUALITY_SCORE" -ge 80 ]; then
+          BADGE_COLOR="brightgreen"
+          BADGE_TEXT="excellent"
+        elif [ "$QUALITY_SCORE" -ge 60 ]; then
+          BADGE_COLOR="yellow"
+          BADGE_TEXT="good"
+        else
+          BADGE_COLOR="red"
+          BADGE_TEXT="needs-work"
+        fi
+        
+        echo "- **Quality Badge**: ![Quality](https://img.shields.io/badge/code_quality-$BADGE_TEXT-$BADGE_COLOR)" >> linting-report.md
+
+    - name: Post PR Comment
+      if: github.event_name == 'pull_request'
+      run: |
+        # Post linting results as PR comment
+        gh pr comment ${{ github.event.pull_request.number }} \
+          --body "$(cat linting-report.md | head -2000)
+
+---
+*AI-powered linting using Microsoft Phi-4 and traditional tools*"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update Code Quality Check
+      uses: actions/github-script@v7
+      if: always()
+      with:
+        script: |
+          const fs = require('fs');
+          let conclusion = 'success';
+          let summary = 'Code quality check passed';
+          
+          try {
+            const report = fs.readFileSync('linting-report.md', 'utf8');
+            const qualityMatch = report.match(/Quality Score\*\*: (\d+)\/100/);
+            
+            if (qualityMatch) {
+              const score = parseInt(qualityMatch[1]);
+              if (score < 60) {
+                conclusion = 'failure';
+                summary = `Code quality score: ${score}/100 - Needs improvement`;
+              } else if (score < 80) {
+                conclusion = 'neutral';
+                summary = `Code quality score: ${score}/100 - Good but can improve`;
+              } else {
+                summary = `Code quality score: ${score}/100 - Excellent!`;
+              }
+            }
+          } catch (error) {
+            conclusion = 'neutral';
+            summary = 'Code quality analysis completed with issues';
+          }
+          
+          await github.rest.checks.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            name: 'AI Code Quality',
+            head_sha: context.sha,
+            status: 'completed',
+            conclusion: conclusion,
+            output: {
+              title: 'AI-Powered Code Quality Analysis',
+              summary: summary
+            }
+          });
+
+    - name: Upload Linting Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: ai-linting-report-${{ github.sha }}
+        path: linting-report.md
+        retention-days: 30
+
+  security-linting:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Security-Focused AI Linting
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      run: |
+        echo "## 🔒 Security-Focused AI Analysis" > security-linting.md
+        
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          # Use specialized model for security analysis
+          aider --model deepseek/deepseek-r1:free \
+                --message "Perform deep security analysis of claude-yolt. Focus on:
+                
+1. **Command Injection**: spawn/exec calls with user input
+2. **Path Traversal**: File operations with untrusted paths  
+3. **Process Control**: Unsafe process management
+4. **Input Validation**: Missing validation on user inputs
+5. **Privilege Escalation**: Unintended permission bypasses
+6. **Resource Exhaustion**: DoS vectors via resource consumption
+7. **Supply Chain**: Dependency vulnerabilities
+
+This tool intentionally bypasses some security controls - focus on unintended vulnerabilities." \
+                lib/ bin/ package.json --no-git --yes > security-linting.md
+        else
+          echo "Security analysis skipped - no API key available" > security-linting.md
+        fi
+
+    - name: Upload Security Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-linting-${{ github.sha }}
+        path: security-linting.md

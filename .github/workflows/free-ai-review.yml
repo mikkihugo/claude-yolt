@@ -12,17 +12,18 @@ permissions:
   issues: write
 
 jobs:
-  setup-ai:
-    uses: ./.github/workflows/openrouter-config.yml
-    secrets: inherit
-
   code-review:
-    needs: setup-ai
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: Setup mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
 
     - name: Setup Python for aider
       uses: actions/setup-python@v5
@@ -41,6 +42,7 @@ jobs:
       if: github.event_name == 'pull_request'
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         # Get changed files
         git diff origin/main...HEAD --name-only > changed-files.txt
@@ -80,8 +82,6 @@ jobs:
         # Post review
         gh pr comment ${{ github.event.pull_request.number }} \
           --body "$(cat review.md | head -1000)"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Static Analysis Fallback
       if: failure() || !env.OPENROUTER_API_KEY
@@ -114,7 +114,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   free-security-check:
-    needs: setup-ai
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4

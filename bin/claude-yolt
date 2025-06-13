@@ -19,18 +19,42 @@ EventEmitter.defaultMaxListeners = 50;
 // Main
 async function main() {
   try {
+    // Check for CI mode first
+    const args = process.argv.slice(2);
+    const isCI = args.includes('--ci') || process.env.CI || process.env.GITHUB_ACTIONS;
+    
     // Apply bug workarounds first
     await bugWorkarounds.autoFix();
     bugWorkarounds.startMonitoring();
     
     // Try to load saved auth
     if (!authManager.injectAuth()) {
-      console.log(chalk.yellow('⚠️  No saved auth found. You may need to login.'));
+      if (isCI) {
+        console.log(chalk.red('❌ CI ERROR: No authentication available'));
+        console.log(chalk.yellow('💡 Claude-yolt requires web login authentication, which doesn\'t work in GitHub Actions'));
+        console.log(chalk.cyan('📝 For CI, use regular "claude" with ANTHROPIC_API_KEY environment variable'));
+        process.exit(1);
+      } else {
+        // Check if we might be in a GitHub Actions runner (local or remote)
+        const possibleRunner = process.env.RUNNER_OS || process.env.GITHUB_WORKSPACE || 
+                              process.env.ACTIONS_RUNNER_DEBUG || process.env.RUNNER_TEMP ||
+                              process.cwd().includes('actions-runner') || 
+                              process.env.PWD?.includes('actions-runner');
+        
+        if (possibleRunner) {
+          console.log(chalk.yellow('⚠️  No saved auth found. You may need to login.'));
+          console.log(chalk.cyan('💡 Detected GitHub Actions runner environment'));
+          console.log(chalk.cyan('   If in workflow, try: CI=true claude-yolt --ci "prompt"'));
+          console.log(chalk.cyan('   Or use regular "claude" with ANTHROPIC_API_KEY instead'));
+        } else {
+          console.log(chalk.yellow('⚠️  No saved auth found. You may need to login.'));
+        }
+      }
     }
     
     // Check consent on first run
     const consentPath = path.join(process.env.HOME, '.claude-yolt', 'consent.json');
-    const hasConsent = await checkFirstRunConsent(consentPath);
+    const hasConsent = await checkFirstRunConsent(consentPath, isCI);
     if (!hasConsent) {
       process.exit(1);
     }
@@ -64,9 +88,11 @@ async function main() {
       ...applyResourceLimits(limits)
     };
     
+    // Remove --ci flag before passing to Claude
+    const claudeArgs = args.filter(arg => arg !== '--ci');
+    
     // Pass ALL arguments to Claude CLI, including flags
     // The YOLO modification already adds --dangerously-skip-permissions internally
-    const args = process.argv.slice(2);
     
     // If no args provided, Claude CLI will show its own UI/prompt
     // Otherwise it processes the command/prompt
@@ -77,7 +103,7 @@ async function main() {
       ${limitCommands}
       
       # Run Claude with process limiter
-      exec node "${limitedCliPath}" ${args.map(a => `"${a}"`).join(' ')}
+      exec node "${limitedCliPath}" ${claudeArgs.map(a => `"${a}"`).join(' ')}
     `], {
       env,
       stdio: 'inherit'

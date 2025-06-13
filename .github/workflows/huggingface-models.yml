@@ -1,0 +1,303 @@
+name: Hugging Face Model Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'HF model to test'
+        required: false
+        type: choice
+        default: 'microsoft/CodeT5p-770M'
+        options:
+          - microsoft/CodeT5p-770M
+          - microsoft/DialoGPT-large
+          - microsoft/CodeBERT-base
+          - Salesforce/codet5-base
+          - bigcode/starcoder
+          - codeparrot/codeparrot
+      task:
+        description: 'Analysis task'
+        required: false
+        type: choice
+        default: 'code-review'
+        options:
+          - code-review
+          - bug-detection
+          - documentation
+          - performance-analysis
+  schedule:
+    - cron: '0 12 * * 1'  # Weekly on Monday
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test-hf-models:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+
+    - name: Test Hugging Face Model
+      env:
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+      run: |
+        echo "# 🤗 Hugging Face Model Testing Report" > hf-test-report.md
+        echo "**Date**: $(date)" >> hf-test-report.md
+        echo "**Model**: ${{ github.event.inputs.model || 'microsoft/CodeT5p-770M' }}" >> hf-test-report.md
+        echo "**Task**: ${{ github.event.inputs.task || 'code-review' }}" >> hf-test-report.md
+        echo "" >> hf-test-report.md
+        
+        MODEL="${{ github.event.inputs.model || 'microsoft/CodeT5p-770M' }}"
+        TASK="${{ github.event.inputs.task || 'code-review' }}"
+        
+        # Test different prompts based on task
+        case "$TASK" in
+          "code-review")
+            PROMPT="Review this JavaScript code for quality, performance, and potential bugs:"
+            ;;
+          "bug-detection")
+            PROMPT="Find potential bugs and security issues in this JavaScript code:"
+            ;;
+          "documentation")
+            PROMPT="Generate documentation for this JavaScript code:"
+            ;;
+          "performance-analysis")
+            PROMPT="Analyze this JavaScript code for performance bottlenecks and optimization opportunities:"
+            ;;
+        esac
+        
+        echo "## Model Information" >> hf-test-report.md
+        echo "Fetching model info..." >> hf-test-report.md
+        
+        # Get model info
+        curl -s "https://api-inference.huggingface.co/models/$MODEL" \
+          -H "Authorization: Bearer $HF_API_KEY" | jq -r '
+          "- **Pipeline**: " + (.pipeline_tag // "unknown") + "\n" +
+          "- **Downloads**: " + (.downloads // 0 | tostring) + "\n" +
+          "- **Likes**: " + (.likes // 0 | tostring) + "\n" +
+          "- **Language**: " + (.language[0] // "unknown") + "\n" +
+          "- **License**: " + (.cardData.license // "unknown")
+        ' >> hf-test-report.md 2>/dev/null || echo "- Model info not available" >> hf-test-report.md
+        
+        echo "" >> hf-test-report.md
+        echo "## Code Analysis Results" >> hf-test-report.md
+        
+        # Test with main process interceptor file
+        if [ -f "lib/process-interceptor.js" ]; then
+          echo "### Analysis of lib/process-interceptor.js" >> hf-test-report.md
+          echo "**Prompt**: $PROMPT" >> hf-test-report.md
+          echo "" >> hf-test-report.md
+          echo "\`\`\`" >> hf-test-report.md
+          
+          # Get first 100 lines of the file for analysis
+          CODE_SAMPLE=$(head -100 lib/process-interceptor.js | jq -Rs .)
+          
+          curl -s "https://api-inference.huggingface.co/models/$MODEL" \
+            -H "Authorization: Bearer $HF_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "inputs": "'$PROMPT'\n\n'$CODE_SAMPLE'",
+              "parameters": {
+                "max_new_tokens": 500,
+                "temperature": 0.1,
+                "do_sample": true
+              }
+            }' | jq -r '.generated_text // .error // "Analysis failed"' >> hf-test-report.md 2>/dev/null || echo "API call failed" >> hf-test-report.md
+          
+          echo "\`\`\`" >> hf-test-report.md
+          echo "" >> hf-test-report.md
+        fi
+        
+        # Test with a smaller utility file
+        if [ -f "lib/hang-detector.js" ]; then
+          echo "### Analysis of lib/hang-detector.js" >> hf-test-report.md
+          echo "**Prompt**: $PROMPT" >> hf-test-report.md
+          echo "" >> hf-test-report.md
+          echo "\`\`\`" >> hf-test-report.md
+          
+          CODE_SAMPLE=$(head -50 lib/hang-detector.js | jq -Rs .)
+          
+          curl -s "https://api-inference.huggingface.co/models/$MODEL" \
+            -H "Authorization: Bearer $HF_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "inputs": "'$PROMPT'\n\n'$CODE_SAMPLE'",
+              "parameters": {
+                "max_new_tokens": 300,
+                "temperature": 0.1,
+                "do_sample": true
+              }
+            }' | jq -r '.generated_text // .error // "Analysis failed"' >> hf-test-report.md 2>/dev/null || echo "API call failed" >> hf-test-report.md
+          
+          echo "\`\`\`" >> hf-test-report.md
+          echo "" >> hf-test-report.md
+        fi
+
+    - name: Test Multiple HF Models Comparison
+      env:
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+      run: |
+        echo "" >> hf-test-report.md
+        echo "## Model Comparison" >> hf-test-report.md
+        echo "Testing multiple models with the same prompt..." >> hf-test-report.md
+        echo "" >> hf-test-report.md
+        
+        # Simple test prompt
+        TEST_PROMPT="Explain what this JavaScript function does: function processQueue() { return activeProcesses.size < maxConcurrent; }"
+        
+        # Test different models
+        MODELS=(
+          "microsoft/CodeT5p-770M"
+          "microsoft/DialoGPT-medium"
+          "Salesforce/codet5-base"
+        )
+        
+        for model in "${MODELS[@]}"; do
+          echo "### $model" >> hf-test-report.md
+          echo "\`\`\`" >> hf-test-report.md
+          
+          curl -s "https://api-inference.huggingface.co/models/$model" \
+            -H "Authorization: Bearer $HF_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "inputs": "'$TEST_PROMPT'",
+              "parameters": {
+                "max_new_tokens": 100,
+                "temperature": 0.1
+              }
+            }' | jq -r '.generated_text // .error // "Model not available"' >> hf-test-report.md 2>/dev/null || echo "Request failed" >> hf-test-report.md
+          
+          echo "\`\`\`" >> hf-test-report.md
+          echo "" >> hf-test-report.md
+        done
+
+    - name: API Performance Test
+      env:
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+      run: |
+        echo "" >> hf-test-report.md
+        echo "## Performance Metrics" >> hf-test-report.md
+        
+        MODEL="${{ github.event.inputs.model || 'microsoft/CodeT5p-770M' }}"
+        
+        # Time the API call
+        start_time=$(date +%s.%N)
+        
+        response=$(curl -s -w "HTTPSTATUS:%{http_code};TIME:%{time_total}" \
+          "https://api-inference.huggingface.co/models/$MODEL" \
+          -H "Authorization: Bearer $HF_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "inputs": "Quick test: analyze this code snippet for bugs.",
+            "parameters": {
+              "max_new_tokens": 50,
+              "temperature": 0.1
+            }
+          }')
+        
+        end_time=$(date +%s.%N)
+        
+        http_code=$(echo "$response" | grep -o "HTTPSTATUS:[0-9]*" | cut -d: -f2)
+        api_time=$(echo "$response" | grep -o "TIME:[0-9.]*" | cut -d: -f2)
+        
+        echo "- **HTTP Status**: $http_code" >> hf-test-report.md
+        echo "- **API Response Time**: ${api_time}s" >> hf-test-report.md
+        echo "- **Total Processing Time**: $(echo "$end_time - $start_time" | bc)s" >> hf-test-report.md
+        
+        if [ "$http_code" = "200" ]; then
+          echo "- **Status**: ✅ Success" >> hf-test-report.md
+        else
+          echo "- **Status**: ❌ Failed" >> hf-test-report.md
+        fi
+
+    - name: Create HF Test Issue
+      if: github.event_name == 'schedule'
+      run: |
+        gh issue create --title "🤗 Weekly Hugging Face Model Test - $(date +%Y-%m-%d)" \
+          --body "$(cat hf-test-report.md)" \
+          --label "huggingface,testing,ai-models"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload HF Test Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: hf-test-report-${{ github.sha }}
+        path: hf-test-report.md
+        retention-days: 30
+
+  optimize-hf-integration:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: HF Integration Recommendations
+      env:
+        HF_API_KEY: ${{ secrets.HF_API_KEY }}
+      run: |
+        echo "# 🚀 Hugging Face Integration Optimization" > hf-optimization.md
+        echo "**Date**: $(date)" >> hf-optimization.md
+        echo "" >> hf-optimization.md
+        
+        echo "## Available Models for Code Analysis" >> hf-optimization.md
+        echo "" >> hf-optimization.md
+        
+        # Test which models are available and working
+        MODELS=(
+          "microsoft/CodeT5p-770M:Code generation and analysis"
+          "microsoft/DialoGPT-large:Conversational AI for code discussion"
+          "Salesforce/codet5-base:Code understanding and generation"
+          "microsoft/CodeBERT-base:Code representation learning"
+          "bigcode/starcoder:Large code model"
+          "codeparrot/codeparrot:Python code generation"
+        )
+        
+        for model_info in "${MODELS[@]}"; do
+          model=$(echo "$model_info" | cut -d: -f1)
+          description=$(echo "$model_info" | cut -d: -f2)
+          
+          echo "### $model" >> hf-optimization.md
+          echo "**Purpose**: $description" >> hf-optimization.md
+          
+          # Quick availability test
+          status=$(curl -s -w "%{http_code}" -o /dev/null \
+            "https://api-inference.huggingface.co/models/$model" \
+            -H "Authorization: Bearer $HF_API_KEY")
+          
+          if [ "$status" = "200" ]; then
+            echo "**Status**: ✅ Available" >> hf-optimization.md
+          else
+            echo "**Status**: ❌ Not available (HTTP $status)" >> hf-optimization.md
+          fi
+          echo "" >> hf-optimization.md
+        done
+        
+        echo "## Integration Strategy" >> hf-optimization.md
+        echo "" >> hf-optimization.md
+        echo "### Recommended Fallback Chain" >> hf-optimization.md
+        echo "1. **OpenRouter** (Primary) - Free models with good performance" >> hf-optimization.md
+        echo "2. **GitHub Models** (Secondary) - Reliable GPT-4 access" >> hf-optimization.md
+        echo "3. **Hugging Face** (Tertiary) - Specialized code models" >> hf-optimization.md
+        echo "4. **Local Tools** (Fallback) - ESLint, JSHint, static analysis" >> hf-optimization.md
+        echo "" >> hf-optimization.md
+        
+        echo "### Best HF Models by Task" >> hf-optimization.md
+        echo "- **Code Review**: CodeT5p-770M, CodeBERT-base" >> hf-optimization.md
+        echo "- **Bug Detection**: microsoft/CodeT5p-770M" >> hf-optimization.md
+        echo "- **Documentation**: DialoGPT-large, CodeT5-base" >> hf-optimization.md
+        echo "- **Performance Analysis**: StarCoder, CodeT5p-770M" >> hf-optimization.md
+        
+        cat hf-optimization.md
+
+    - name: Upload Optimization Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: hf-optimization-${{ github.sha }}
+        path: hf-optimization.md

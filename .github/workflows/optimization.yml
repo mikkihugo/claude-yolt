@@ -16,11 +16,20 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Setup
+    - name: Setup with mise
+      uses: jdx/mise-action@v2
+      with:
+        cache: true
+        experimental: true
+        
+    - name: Install dependencies and tools
       run: |
+        # Install local dependencies first
+        npm ci || npm install
+        # Install Python tools
+        pip install -q aider-chat
+        # Install globally
         npm install -g .
-        mkdir -p ~/.config/@anthropic-ai/claude-code
-        echo "{\"apiKey\": \"${{ secrets.ANTHROPIC_API_KEY }}\"}" > ~/.config/@anthropic-ai/claude-code/config.json
 
     - name: Profile Current Performance
       run: |
@@ -60,78 +69,111 @@ jobs:
 
     - name: Optimization Analysis
       env:
-        CLAUDE_MAX_PROCESSES: "30"
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Analyze performance optimization opportunities in claude-yolt:
-        
-        Current performance:
-        $(cat performance-baseline.txt)
-        
-        Analyze these components for optimization:
-        1. Process queue implementation
-        2. Stream handling efficiency
-        3. Event emitter usage
-        4. Map/Set operations
-        5. String operations
-        6. Async/await patterns
-        
-        Code to optimize:
-        $(cat lib/process-interceptor.js | head -300)
-        
-        Provide:
-        - Specific optimizations with code
-        - Expected performance gain
-        - Complexity improvement (O notation)
-        - Memory usage reduction" > optimization-report.md 2>&1
+        if [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user",
+                "content": "Analyze performance optimization opportunities in claude-yolt:\n\nCurrent performance:\n'$(cat performance-baseline.txt | jq -Rs .)'\n\nAnalyze components for optimization:\n1. Process queue implementation\n2. Stream handling efficiency\n3. Event emitter usage\n4. Map/Set operations\n5. String operations\n6. Async/await patterns\n\nProvide:\n- Specific optimizations with code\n- Expected performance gain\n- Complexity improvement (O notation)\n- Memory usage reduction"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 3000
+            }' | jq -r '.choices[0].message.content' > optimization-report.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model nousresearch/hermes-3-llama-3.1-405b:free \
+                --message "Analyze performance optimization opportunities: process queue, stream handling, event emitters, Map/Set ops, async patterns. Include specific code optimizations and O notation analysis" \
+                lib/process-interceptor.js --no-git --yes > optimization-report.md
+        else
+          echo "## Performance Optimization Analysis" > optimization-report.md
+          echo "Analysis skipped - no API key available" >> optimization-report.md
+        fi
 
     - name: Generate Optimized Code
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Pick the most impactful optimization
-        claude-yolt "Implement the most impactful optimization from the analysis:
-        
-        Previous analysis:
-        $(cat optimization-report.md | head -200)
-        
-        Generate:
-        1. Optimized version of the specific function/component
-        2. Benchmark to prove improvement
-        3. Unit test for the optimization
-        
-        Output the complete optimized code" > optimized-code.js 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model qwen/qwen-2.5-coder-32b-instruct:free \
+                --message "Implement the most impactful optimization from the analysis. Generate optimized version, benchmark to prove improvement, unit test for optimization" \
+                lib/process-interceptor.js --no-git --yes > optimized-code.js
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user",
+                "content": "Based on the previous analysis, implement the most impactful optimization:\n\n1. Optimized version of the specific function/component\n2. Benchmark to prove improvement\n3. Unit test for the optimization\n\nOutput the complete optimized code"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2500
+            }' | jq -r '.choices[0].message.content' > optimized-code.js
+        else
+          echo "## Optimized Code" > optimized-code.js
+          echo "Code generation skipped - no API key available" >> optimized-code.js
+        fi
 
     - name: Memory Optimization
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Optimize memory usage in claude-yolt:
-        
-        Current issues:
-        1. Maps that could be WeakMaps
-        2. Arrays that could be Sets
-        3. String concatenation vs buffers
-        4. Unnecessary object cloning
-        5. Large closures
-        
-        Analyze:
-        $(find lib -name '*.js' -exec grep -l "new Map\\|new Set\\|concat\\|push" {} \;)
-        
-        Suggest memory-efficient alternatives" >> optimization-report.md 2>&1
+        if [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model deepseek/deepseek-r1:free \
+                --message "Optimize memory usage: Maps->WeakMaps, Arrays->Sets, string concat->buffers, avoid object cloning, reduce closures" \
+                lib/ --no-git --yes >> optimization-report.md
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-mini",
+              "messages": [{
+                "role": "user",
+                "content": "Optimize memory usage in claude-yolt:\n\n1. Maps that could be WeakMaps\n2. Arrays that could be Sets\n3. String concatenation vs buffers\n4. Unnecessary object cloning\n5. Large closures\n\nSuggest memory-efficient alternatives"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 1500
+            }' | jq -r '.choices[0].message.content' >> optimization-report.md
+        else
+          echo "## Memory Optimization" >> optimization-report.md
+          echo "Analysis skipped - no API key available" >> optimization-report.md
+        fi
 
     - name: Algorithm Optimization
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        claude-yolt "Find algorithm improvements in claude-yolt:
-        
-        Look for:
-        1. Linear searches that could be O(1) with Map
-        2. Nested loops that could be flattened
-        3. Repeated calculations without memoization
-        4. Inefficient queue operations
-        5. Suboptimal data structures
-        
-        Focus on hot paths:
-        - trySpawnNext() in process queue
-        - Stream data handling
-        - Process cleanup loops
-        
-        Provide Big O analysis for current vs optimized" >> optimization-report.md 2>&1
+        if [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-2024-11-20",
+              "messages": [{
+                "role": "user",
+                "content": "Find algorithm improvements in claude-yolt:\n\n1. Linear searches that could be O(1) with Map\n2. Nested loops that could be flattened\n3. Repeated calculations without memoization\n4. Inefficient queue operations\n5. Suboptimal data structures\n\nFocus on hot paths: trySpawnNext() in process queue, Stream data handling, Process cleanup loops\n\nProvide Big O analysis for current vs optimized"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 2000
+            }' | jq -r '.choices[0].message.content' >> optimization-report.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model nousresearch/hermes-3-llama-3.1-405b:free \
+                --message "Find algorithm improvements: linear->O(1) searches, flatten nested loops, memoization, efficient queues. Focus on trySpawnNext(), stream handling, cleanup. Include Big O analysis" \
+                lib/process-interceptor.js --no-git --yes >> optimization-report.md
+        else
+          echo "## Algorithm Optimization" >> optimization-report.md
+          echo "Analysis skipped - no API key available" >> optimization-report.md
+        fi
 
     - name: Create Optimization PR
       run: |
@@ -159,12 +201,12 @@ jobs:
         
         # Commit and push
         git commit -m "🚀 Performance optimization suggestions
-        
+
         Based on automated analysis:
         - Identified optimization opportunities
         - Generated optimized code examples
         - Documented expected improvements
-        
+
         See optimization-report.md for details"
         
         git push origin $BRANCH
@@ -174,7 +216,7 @@ jobs:
           --title "🚀 Performance Optimizations - $(date +%B)" \
           --body "## Performance Optimization Analysis
           
-          This PR contains optimization suggestions generated by claude-yolt.
+          This PR contains optimization suggestions generated using free AI models.
           
           ### Summary:
           $(grep -A 3 "Expected performance gain" optimization-report.md | head -20)
@@ -189,26 +231,56 @@ jobs:
           3. Benchmark before/after
           
           ---
-          *Generated by claude-yolt performance optimizer*" \
+          *Generated using GitHub Models/OpenRouter free AI models*" \
           --label "performance,enhancement"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Benchmark Comparison
+      env:
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
-        # Create visual benchmark comparison
-        claude-yolt "Create a benchmark comparison report:
-        
-        Data:
-        $(cat performance-baseline.txt)
-        
-        Generate:
-        1. Performance comparison table
-        2. Overhead percentage calculation
-        3. Recommendations for different use cases
-        4. Settings for optimal performance
-        
-        Format as markdown with tables" > benchmark-report.md 2>&1
+        # Use claude-yolt for benchmark analysis (eating our own dog food)
+        if [ -n "$ANTHROPIC_API_KEY" ]; then
+          mkdir -p ~/.config/@anthropic-ai/claude-code
+          echo "{\"apiKey\": \"$ANTHROPIC_API_KEY\"}" > ~/.config/@anthropic-ai/claude-code/config.json
+          echo "Using claude-yolt for benchmark comparison..."
+          
+          claude-yolt "Create a benchmark comparison report:
+          
+          Data:
+          $(cat performance-baseline.txt)
+          
+          Generate:
+          1. Performance comparison table
+          2. Overhead percentage calculation
+          3. Recommendations for different use cases
+          4. Settings for optimal performance
+          
+          Format as markdown with tables" > benchmark-report.md 2>&1
+        elif [ -n "$GITHUB_TOKEN" ]; then
+          curl -s "https://models.inference.ai.azure.com/chat/completions" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4o-mini",
+              "messages": [{
+                "role": "user",
+                "content": "Create a benchmark comparison report:\n\nData:\n'$(cat performance-baseline.txt | jq -Rs .)'\n\nGenerate:\n1. Performance comparison table\n2. Overhead percentage calculation\n3. Recommendations for different use cases\n4. Settings for optimal performance\n\nFormat as markdown with tables"
+              }],
+              "temperature": 0.1,
+              "max_tokens": 1500
+            }' | jq -r '.choices[0].message.content' > benchmark-report.md
+        elif [ -n "$OPENROUTER_API_KEY" ]; then
+          aider --model cohere/command-r-plus-08-2024:free \
+                --message "Create benchmark comparison report: performance table, overhead percentages, recommendations, optimal settings" \
+                --no-git --yes < performance-baseline.txt > benchmark-report.md
+        else
+          echo "## Benchmark Comparison" > benchmark-report.md
+          echo "Report generation skipped - no API key available" >> benchmark-report.md
+        fi
         
         # Create issue if significant overhead
         if grep -q "overhead: [5-9][0-9]%\|overhead: [1-9][0-9][0-9]%" benchmark-report.md; then
