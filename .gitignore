@@ -2,6 +2,12 @@
 node_modules/
 
 # Rust build artifacts
+
+rust/target/
+rust-process-manager/target/
+rust/Cargo.lock
+rust-process-manager/Cargo.lock
+=======
 **/target/
 **/Cargo.lock
 **/.fingerprint/
@@ -9,6 +15,7 @@ node_modules/
 **/*.rlib
 **/*.rmeta
 **/*.d
+
 
 # Config and consent files
 .claude-yolt/
@@ -63,6 +70,17 @@ Thumbs.db
 # Build outputs
 dist/
 build/
+
+
+# Additional build artifacts
+*.tmp
+*.temp
+.cache/
+coverage/
+.nyc_output/
+
+# Session files
+SESSION.md
 **/dist/
 **/build/
 
@@ -73,3 +91,4 @@ build/
 **/*.temp
 **/tmp/
 **/temp/
+
