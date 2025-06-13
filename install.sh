@@ -31,19 +31,37 @@ const path = require('path');
 const fs = require('fs');
 
 // Find claude-yolt installation
-const possiblePaths = [
-  path.join(process.env.HOME, 'code/claude-yolt'),
-  path.join(process.env.HOME, '.claude-yolt/installation'),
-  path.join(process.env.HOME, 'claude-yolt'),
-  '/usr/local/lib/node_modules/claude-yolt',
-  path.join(process.env.HOME, '.npm/lib/node_modules/claude-yolt')
-];
-
 let claudeYoltPath = null;
-for (const p of possiblePaths) {
-  if (fs.existsSync(path.join(p, 'bin/claude-yolt'))) {
-    claudeYoltPath = p;
-    break;
+
+// First, try to read from installation.json
+const installationJsonPath = path.join(process.env.HOME, '.claude-yolt', 'installation.json');
+if (fs.existsSync(installationJsonPath)) {
+  try {
+    const installationInfo = JSON.parse(fs.readFileSync(installationJsonPath, 'utf8'));
+    const candidatePath = installationInfo.installPath;
+    if (candidatePath && fs.existsSync(path.join(candidatePath, 'bin/claude-yolt'))) {
+      claudeYoltPath = candidatePath;
+    }
+  } catch (e) {
+    // Ignore JSON parse errors and fall back to hardcoded paths
+  }
+}
+
+// Fall back to hardcoded paths if installation.json doesn't work
+if (!claudeYoltPath) {
+  const possiblePaths = [
+    path.join(process.env.HOME, 'code/claude-yolt'),
+    path.join(process.env.HOME, '.claude-yolt/installation'),
+    path.join(process.env.HOME, 'claude-yolt'),
+    '/usr/local/lib/node_modules/claude-yolt',
+    path.join(process.env.HOME, '.npm/lib/node_modules/claude-yolt')
+  ];
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(path.join(p, 'bin/claude-yolt'))) {
+      claudeYoltPath = p;
+      break;
+    }
   }
 }
 
