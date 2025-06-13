@@ -13,6 +13,7 @@
     "test": "node test.js",
     "test:memory": "node test-memory-leaks.js",
     "test:demo": "node demo-memory-leaks.js",
+    "test:validate": "node validate-memory-detection.js",
     "bug-hunt": "node bug-hunt.js",
     "start": "node bin/claude-yolt",
     "dev": "NODE_ENV=development node bin/claude-yolt",
