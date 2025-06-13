@@ -1,0 +1,18 @@
+{
+  "scanTime": "2025-06-13T23:22:45.769Z",
+  "totalIssues": 0,
+  "findings": [],
+  "memorySnapshot": {
+    "rss": 62763008,
+    "heapTotal": 17534976,
+    "heapUsed": 10851560,
+    "external": 2325449,
+    "arrayBuffers": 16877
+  },
+  "systemInfo": {
+    "platform": "linux",
+    "nodeVersion": "v20.19.2",
+    "uptime": 0.335908788,
+    "pid": 6354
+  }
+}
