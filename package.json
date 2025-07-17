@@ -43,8 +43,8 @@
     "commander": "^14.0.0",
     "express": "^5.1.0",
     "ora": "^8.2.0",
-    "uuid": "^11.1.0",
     "prom-client": "^15.0.0",
+    "uuid": "^11.1.0",
     "winston": "^3.11.0",
     "winston-elasticsearch": "^0.19.0"
   },
@@ -56,7 +56,13 @@
     "test": "test"
   },
   "devDependencies": {
+
+   
+    
+    "eslint": "^9.30.1",
+
     "@types/node": "^24.0.13",
+
     "typescript": "^5.8.3"
   },
   "bugs": {
