@@ -57,7 +57,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.2.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   },
   "bugs": {
     "url": "https://github.com/mikkihugo/claude-yolt/issues"
